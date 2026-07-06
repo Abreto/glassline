@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, writeFile, utimes } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -47,6 +49,116 @@ test("parseCodexSessionFile extracts metadata, messages, and skips malformed lin
       ["assistant", "I will inspect the session files."]
     ]
   );
+});
+
+test("parseCodexSessionFile uses the newest JSONL event when the index is stale", async () => {
+  const session = await parseCodexSessionFile(fixtureSessionPath, {
+    indexEntry: {
+      id: "11111111-1111-4111-8111-111111111111",
+      thread_name: "Fixture Codex thread",
+      updated_at: "2026-07-05T08:00:00.000Z"
+    }
+  });
+
+  assert.equal(session.lastUpdatedAt, "2026-07-05T09:00:14.000Z");
+  assert.equal(session.sources[0].updatedAt, "2026-07-05T09:00:14.000Z");
+});
+
+test("summary session uses file mtime when the index is stale", async () => {
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-home-"));
+  const sessionId = "33333333-3333-4333-8333-333333333333";
+  const sessionDir = path.join(codexHome, "sessions/2026/07/05");
+  const sessionPath = path.join(
+    sessionDir,
+    `rollout-2026-07-05T09-00-00-${sessionId}.jsonl`
+  );
+
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(
+    path.join(codexHome, "session_index.jsonl"),
+    `${JSON.stringify({
+      id: sessionId,
+      thread_name: "Stale index session",
+      updated_at: "2026-07-05T08:00:00.000Z"
+    })}\n`
+  );
+  await writeFile(
+    sessionPath,
+    `${JSON.stringify({
+      timestamp: "2026-07-05T09:00:00.000Z",
+      type: "session_meta",
+      payload: {
+        session_id: sessionId,
+        timestamp: "2026-07-05T09:00:00.000Z",
+        cwd: "/repo/glassline"
+      }
+    })}\n`
+  );
+  await utimes(
+    sessionPath,
+    new Date("2026-07-05T09:20:00.000Z"),
+    new Date("2026-07-05T09:20:00.000Z")
+  );
+
+  const sessions = await listCodexSessionFileSessions({ codexHome, summaryOnly: true });
+  const session = sessions.find((candidate) => candidate.id === `codex:session-file:${sessionId}`);
+
+  assert.equal(session.lastUpdatedAt, "2026-07-05T09:20:00.000Z");
+  assert.equal(session.sources[0].updatedAt, "2026-07-05T09:20:00.000Z");
+});
+
+test("summary sessions keep the newest file when rollout files share a session id", async () => {
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-home-"));
+  const sessionId = "44444444-4444-4444-8444-444444444444";
+  const sessionDir = path.join(codexHome, "sessions/2026/07/05");
+  const newerPath = path.join(
+    sessionDir,
+    "rollout-2026-07-05T09-00-00-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jsonl"
+  );
+  const olderPath = path.join(
+    sessionDir,
+    "rollout-2026-07-05T10-00-00-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jsonl"
+  );
+
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(
+    path.join(codexHome, "session_index.jsonl"),
+    `${JSON.stringify({
+      id: sessionId,
+      thread_name: "Shared rollout session",
+      updated_at: "2026-07-05T08:00:00.000Z"
+    })}\n`
+  );
+  for (const filePath of [newerPath, olderPath]) {
+    await writeFile(
+      filePath,
+      `${JSON.stringify({
+        timestamp: "2026-07-05T09:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          session_id: sessionId,
+          timestamp: "2026-07-05T09:00:00.000Z",
+          cwd: "/repo/glassline"
+        }
+      })}\n`
+    );
+  }
+  await utimes(
+    newerPath,
+    new Date("2026-07-05T11:00:00.000Z"),
+    new Date("2026-07-05T11:00:00.000Z")
+  );
+  await utimes(
+    olderPath,
+    new Date("2026-07-05T10:00:00.000Z"),
+    new Date("2026-07-05T10:00:00.000Z")
+  );
+
+  const sessions = await listCodexSessionFileSessions({ codexHome, summaryOnly: true });
+  const session = sessions.find((candidate) => candidate.id === `codex:session-file:${sessionId}`);
+
+  assert.equal(session.lastUpdatedAt, "2026-07-05T11:00:00.000Z");
+  assert.equal(session.sources[0].path, newerPath);
 });
 
 test("parseCodexSessionFile maps function calls, outputs, and patch changes", async () => {

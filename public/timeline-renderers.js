@@ -36,6 +36,94 @@ export function renderCommandBody(item) {
   `;
 }
 
+export function renderMessageBody(item) {
+  return `<div class="message-markdown">${renderMarkdown(textForTimelineItem(item))}</div>`;
+}
+
+export function renderMarkdown(value) {
+  const lines = String(value ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const blocks = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    if (isBlank(lines[index])) {
+      index += 1;
+      continue;
+    }
+
+    const codeFence = lines[index].match(/^```\w*[\t ]*$/);
+    if (codeFence) {
+      const codeLines = [];
+      index += 1;
+
+      while (index < lines.length && !/^```[\t ]*$/.test(lines[index])) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+
+      if (index < lines.length) {
+        index += 1;
+      }
+
+      blocks.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}${codeLines.length ? "\n" : ""}</code></pre>`);
+      continue;
+    }
+
+    const heading = lines[index].match(/^(#{1,3})[\t ]+(.+?)\s*#*$/);
+    if (heading) {
+      const level = heading[1].length + 2;
+      blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*>/.test(lines[index])) {
+      const quoteLines = [];
+      while (index < lines.length && /^\s*>/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^\s*>\s?/, ""));
+        index += 1;
+      }
+      blocks.push(`<blockquote>${renderParagraph(quoteLines)}</blockquote>`);
+      continue;
+    }
+
+    const unorderedList = lines[index].match(/^\s*[-*]\s+(.+)$/);
+    if (unorderedList) {
+      const items = [];
+      while (index < lines.length) {
+        const item = lines[index].match(/^\s*[-*]\s+(.+)$/);
+        if (!item) break;
+        items.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
+        index += 1;
+      }
+      blocks.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    const orderedList = lines[index].match(/^\s*\d+[.)]\s+(.+)$/);
+    if (orderedList) {
+      const items = [];
+      while (index < lines.length) {
+        const item = lines[index].match(/^\s*\d+[.)]\s+(.+)$/);
+        if (!item) break;
+        items.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
+        index += 1;
+      }
+      blocks.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    const paragraphLines = [];
+    while (index < lines.length && !isBlank(lines[index]) && !startsMarkdownBlock(lines[index])) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    blocks.push(renderParagraph(paragraphLines));
+  }
+
+  return blocks.join("");
+}
+
 export function renderActivityGroup(group) {
   const tone = group.items.some(isFailedAction) ? "bad" : "neutral";
   return `
@@ -196,6 +284,74 @@ function activitySummary(items) {
 
 function plural(count, singular, pluralLabel = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralLabel}`;
+}
+
+function renderParagraph(lines) {
+  return `<p>${lines.map(renderInlineMarkdown).join("<br>")}</p>`;
+}
+
+function renderInlineMarkdown(value) {
+  const tokens = [];
+  let text = String(value ?? "");
+
+  text = tokenize(text, /`([^`\n]+)`/g, (match) => `<code>${escapeHtml(match[1])}</code>`, tokens);
+  text = tokenize(
+    text,
+    /\[([^\]\n]+)\]\(([^)\s]+)\)/g,
+    (match) => {
+      const label = escapeHtml(match[1]);
+      const href = match[2];
+
+      return isSafeHref(href)
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${label}</a>`
+        : escapeHtml(match[0]);
+    },
+    tokens
+  );
+  text = tokenize(text, /\*\*([^*\n]+)\*\*/g, (match) => `<strong>${escapeHtml(match[1])}</strong>`, tokens);
+  text = tokenize(text, /\*([^*\n]+)\*/g, (match) => `<em>${escapeHtml(match[1])}</em>`, tokens);
+
+  return restoreTokens(escapeHtml(text), tokens);
+}
+
+function tokenize(text, pattern, renderToken, tokens) {
+  return text.replace(pattern, (...args) => {
+    const match = args[0];
+    const token = `\u0000GLASSLINE_MD_${tokens.length}\u0000`;
+    tokens.push([token, renderToken(args.slice(0, -2), match)]);
+    return token;
+  });
+}
+
+function restoreTokens(text, tokens) {
+  let result = text;
+  for (const [token, html] of tokens) {
+    result = result.replaceAll(token, html);
+  }
+  return result;
+}
+
+function isSafeHref(href) {
+  try {
+    const url = new URL(href);
+    return ["http:", "https:", "mailto:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isBlank(line) {
+  return !line.trim();
+}
+
+function startsMarkdownBlock(line) {
+  return (
+    /^```\w*[\t ]*$/.test(line) ||
+    /^(#{1,3})[\t ]+/.test(line) ||
+    /^\s*>/.test(line) ||
+    /^\s*[-*]\s+/.test(line) ||
+    /^\s*\d+[.)]\s+/.test(line)
+  );
 }
 
 function isFailedAction(item) {

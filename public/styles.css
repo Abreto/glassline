@@ -311,6 +311,61 @@ h2 {
   padding: 12px;
 }
 
+.message-markdown {
+  display: grid;
+  font-size: 14px;
+  gap: 10px;
+}
+
+.message-markdown :where(p, ul, ol, blockquote, pre, h3, h4, h5) {
+  margin: 0;
+}
+
+.message-markdown p {
+  white-space: normal;
+}
+
+.message-markdown :where(ul, ol) {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+
+.message-markdown blockquote {
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+  padding-left: 10px;
+}
+
+.message-markdown :where(h3, h4, h5) {
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.message-markdown code {
+  background: #eef2f7;
+  border: 1px solid #dbe4ee;
+  border-radius: 5px;
+  color: var(--ink);
+  font:
+    12px / 1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  padding: 1px 4px;
+}
+
+.message-markdown pre code {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+.message-markdown a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 .block-body p,
 pre {
   overflow-wrap: anywhere;

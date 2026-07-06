@@ -6,6 +6,8 @@ import {
   groupTimelineItems,
   renderActivityGroup,
   renderCommandBody,
+  renderMessageBody,
+  textForTimelineItem,
   shouldFocusLatestTimeline
 } from "../public/timeline-renderers.js";
 
@@ -20,6 +22,61 @@ test("command output is collapsed by default but keeps full output available", (
   assert.match(html, /<summary>Show output \(3 lines\)<\/summary>/);
   assert.match(html, /line 1\nline 2\nline 3/);
   assert.doesNotMatch(html, /<details class="command-output" open>/);
+});
+
+test("renderMessageBody renders a safe markdown subset", () => {
+  const html = renderMessageBody({
+    type: "message",
+    role: "assistant",
+    content: [
+      "# Findings",
+      "",
+      "Use **bold**, *italic*, `inline code`, and [docs](https://example.com).",
+      "",
+      "- first item",
+      "- second item",
+      "",
+      "> quoted note",
+      "",
+      "```js",
+      "const value = \"<tag>\";",
+      "```"
+    ].join("\n")
+  });
+
+  assert.match(html, /<div class="message-markdown">/);
+  assert.match(html, /<h3>Findings<\/h3>/);
+  assert.match(html, /<strong>bold<\/strong>/);
+  assert.match(html, /<em>italic<\/em>/);
+  assert.match(html, /<code>inline code<\/code>/);
+  assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noreferrer">docs<\/a>/);
+  assert.match(html, /<ul><li>first item<\/li><li>second item<\/li><\/ul>/);
+  assert.match(html, /<blockquote><p>quoted note<\/p><\/blockquote>/);
+  assert.match(html, /<pre><code>const value = &quot;&lt;tag&gt;&quot;;\n<\/code><\/pre>/);
+});
+
+test("renderMessageBody escapes raw HTML and rejects unsafe links", () => {
+  const html = renderMessageBody({
+    type: "message",
+    role: "user",
+    content: "Hello <script>alert(1)</script> [bad](javascript:alert(1)) [mail](mailto:team@example.com)"
+  });
+
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.doesNotMatch(html, /href="javascript:alert\(1\)"/);
+  assert.match(html, /\[bad\]\(javascript:alert\(1\)\)/);
+  assert.match(html, /<a href="mailto:team@example\.com" target="_blank" rel="noreferrer">mail<\/a>/);
+});
+
+test("message copy text stays as the original markdown source", () => {
+  const item = {
+    type: "message",
+    role: "assistant",
+    content: "**Keep markdown** and `code`"
+  };
+
+  assert.equal(textForTimelineItem(item), "**Keep markdown** and `code`");
 });
 
 test("groupTimelineItems keeps messages as the main timeline", () => {

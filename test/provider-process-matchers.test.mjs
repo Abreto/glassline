@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { matchesClaudeCodeAgentProcess } from "../src/providers/claude-code.mjs";
 import { matchesCodexAgentProcess } from "../src/providers/codex.mjs";
+import { processSession } from "../src/providers/process-utils.mjs";
 
 test("codex matcher includes CLI sessions and excludes desktop helper processes", () => {
   assert.equal(matchesCodexAgentProcess({ command: "codex" }), true);
@@ -31,4 +32,22 @@ test("claude-code matcher includes CLI sessions and excludes daemon-only process
     }),
     false
   );
+});
+
+test("process-only sessions sort by process start time, not discovery refresh time", () => {
+  const session = processSession({
+    providerId: "codex",
+    providerName: "Codex",
+    processInfo: {
+      pid: 123,
+      startedAt: "2026-07-05T09:00:00.000Z",
+      command: "codex"
+    },
+    title: "Codex process",
+    cwd: "/repo",
+    now: new Date("2026-07-05T10:00:00.000Z")
+  });
+
+  assert.equal(session.lastUpdatedAt, "2026-07-05T09:00:00.000Z");
+  assert.equal(session.sources[0].updatedAt, "2026-07-05T10:00:00.000Z");
 });

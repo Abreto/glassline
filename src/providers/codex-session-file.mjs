@@ -39,10 +39,10 @@ export async function listCodexSessionFileSessions({
         const session = summaryOnly
           ? await summarizeCodexSessionFile(filePath, { indexEntry })
           : await parseCodexSessionFile(filePath, { indexEntry });
-        parsedById.set(session.id, session);
+        setNewestSession(parsedById, session);
       } catch {
         if (indexEntry) {
-          parsedById.set(glasslineSessionId(indexEntry.id), staleIndexSession(indexEntry, filePath));
+          setNewestSession(parsedById, staleIndexSession(indexEntry, filePath));
         }
       }
     })
@@ -56,6 +56,13 @@ export async function listCodexSessionFileSessions({
   }
 
   return [...parsedById.values()];
+}
+
+function setNewestSession(sessionsById, session) {
+  const existing = sessionsById.get(session.id);
+  if (!existing || Date.parse(session.lastUpdatedAt) > Date.parse(existing.lastUpdatedAt)) {
+    sessionsById.set(session.id, session);
+  }
 }
 
 export async function getCodexSessionFileSession(id, { codexHome = resolveCodexHome() } = {}) {
@@ -92,7 +99,7 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
     label: "Codex JSONL",
     confidence: "medium",
     path: filePath,
-    updatedAt: indexEntry?.updated_at ?? fileUpdatedAt
+    updatedAt: fileUpdatedAt
   };
   const timeline = [];
   const callsById = new Map();
@@ -198,7 +205,8 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
   }
 
   const sessionUuid = meta.id ?? indexEntry?.id ?? sessionIdFromFilePath(filePath);
-  const lastUpdatedAt = indexEntry?.updated_at ?? latestCreatedAt ?? fileUpdatedAt;
+  const lastUpdatedAt = newestIso(indexEntry?.updated_at, latestCreatedAt) ?? fileUpdatedAt;
+  sourceRef.updatedAt = lastUpdatedAt;
 
   return {
     id: glasslineSessionId(sessionUuid),
@@ -221,6 +229,7 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
 async function summarizeCodexSessionFile(filePath, { indexEntry } = {}) {
   const fileStat = await stat(filePath);
   const fileUpdatedAt = fileStat.mtime.toISOString();
+  const lastUpdatedAt = newestIso(indexEntry?.updated_at, fileUpdatedAt);
   const firstRecord = await readFirstJsonRecord(filePath);
   const payload = firstRecord?.type === "session_meta" ? firstRecord.payload ?? {} : {};
   const sessionUuid = payload.session_id ?? payload.id ?? indexEntry?.id ?? sessionIdFromFilePath(filePath);
@@ -229,7 +238,7 @@ async function summarizeCodexSessionFile(filePath, { indexEntry } = {}) {
     label: "Codex JSONL",
     confidence: "medium",
     path: filePath,
-    updatedAt: indexEntry?.updated_at ?? fileUpdatedAt
+    updatedAt: lastUpdatedAt
   };
 
   return {
@@ -241,7 +250,7 @@ async function summarizeCodexSessionFile(filePath, { indexEntry } = {}) {
     status: "unknown",
     quality: "partial",
     startedAt: toIsoTimestamp(payload.timestamp ?? firstRecord?.timestamp),
-    lastUpdatedAt: indexEntry?.updated_at ?? fileUpdatedAt,
+    lastUpdatedAt,
     recentMessage: indexEntry?.thread_name,
     sources: [sourceRef],
     timeline: [],
@@ -539,6 +548,10 @@ function maxIso(left, right) {
   }
 
   return Date.parse(right) > Date.parse(left) ? right : left;
+}
+
+function newestIso(...values) {
+  return values.filter(Boolean).reduce((latest, value) => maxIso(latest, value), undefined);
 }
 
 function toIsoTimestamp(value) {

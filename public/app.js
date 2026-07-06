@@ -3,6 +3,7 @@ import {
   groupTimelineItems,
   renderActivityGroup,
   renderCommandBody,
+  renderMessageBody,
   shouldFocusLatestTimeline,
   textForTimelineItem,
   titleForTimelineItem
@@ -206,6 +207,10 @@ function renderTabs() {
 }
 
 function bodyForTimelineItem(item) {
+  if (item.type === "message") {
+    return renderMessageBody(item);
+  }
+
   if (item.type === "command") {
     return renderCommandBody(item);
   }

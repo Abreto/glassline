@@ -39,6 +39,14 @@ test("mobile layout keeps the session list as a horizontal strip", () => {
   assertRuleIncludes(".session-list", ["grid-auto-flow: column", "overflow-x: auto", "overflow-y: hidden"], media);
 });
 
+test("message markdown keeps compact timeline typography", () => {
+  assertRuleIncludes(".message-markdown", ["display: grid", "gap: 10px", "font-size: 14px"]);
+  assertRuleIncludes(".message-markdown p", ["white-space: normal"]);
+  assertRuleIncludes(".message-markdown :where(h3, h4, h5)", ["font-size: 14px", "line-height: 1.35"]);
+  assertRuleIncludes(".message-markdown code", ["border-radius: 5px", "padding: 1px 4px"]);
+  assertRuleIncludes(".message-markdown pre code", ["background: transparent", "border: 0", "padding: 0"]);
+});
+
 function assertRuleIncludes(selector, expected, source = css) {
   const rule = extractRule(selector, source);
   for (const declaration of expected) {

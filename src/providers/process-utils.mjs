@@ -54,6 +54,7 @@ export function processSession({
   now = new Date()
 }) {
   const updatedAt = now.toISOString();
+  const lastUpdatedAt = processInfo.startedAt ?? updatedAt;
   const sourceRef = {
     kind: "process",
     label: `pid ${processInfo.pid}`,
@@ -70,7 +71,7 @@ export function processSession({
     status: "running",
     quality: "process-only",
     startedAt: processInfo.startedAt,
-    lastUpdatedAt: updatedAt,
+    lastUpdatedAt,
     recentMessage: processInfo.command,
     sources: [sourceRef],
     timeline: [
