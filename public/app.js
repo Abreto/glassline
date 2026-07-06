@@ -10,6 +10,7 @@ import {
 } from "./timeline-renderers.js";
 import {
   renderDetailResumeRef,
+  renderSessionCompactMeta,
   renderSessionResumeLine,
   textForResumeRef
 } from "./session-renderers.js";
@@ -129,7 +130,8 @@ function renderSessionRow(session) {
         ${badge(session.quality, toneForQuality(session.quality))}
         ${session.sources.map((source) => badge(`${source.kind}:${source.confidence}`)).join("")}
       </div>
-      <p class="meta-line">${formatTime(session.lastUpdatedAt)} · ${escapeHtml(session.projectPath ?? "Unknown path")}</p>
+      <p class="meta-line session-meta-full">${formatTime(session.lastUpdatedAt)} · ${escapeHtml(session.projectPath ?? "Unknown path")}</p>
+      ${renderSessionCompactMeta(session, formatTime(session.lastUpdatedAt))}
       ${renderSessionResumeLine(session)}
       ${recent}
     </button>
@@ -142,7 +144,8 @@ function renderDetailHeader(session) {
   detailHeaderEl.innerHTML = `
     <div class="detail-heading">
       <h2>${escapeHtml(session.title)}</h2>
-      <p class="meta-line">${escapeHtml(session.providerName)} · ${escapeHtml(session.projectPath ?? "Unknown path")} · ${formatTime(session.lastUpdatedAt)}</p>
+      <p class="meta-line detail-meta-full">${escapeHtml(session.providerName)} · ${escapeHtml(session.projectPath ?? "Unknown path")} · ${formatTime(session.lastUpdatedAt)}</p>
+      <p class="meta-line detail-meta-mobile">${escapeHtml(session.providerName)} · ${formatTime(session.lastUpdatedAt)}</p>
       ${renderDetailResumeRef(session, resumeCopyId)}
       <div class="badge-row">
         ${badge(session.status, toneForStatus(session.status))}

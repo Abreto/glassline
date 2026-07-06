@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   renderDetailResumeRef,
+  renderSessionCompactMeta,
   renderSessionResumeLine,
   textForResumeRef
 } from "../public/session-renderers.js";
@@ -56,6 +57,30 @@ test("textForResumeRef copies the raw provider argument only", () => {
     }),
     "abc123"
   );
+});
+
+test("renderSessionCompactMeta shows only time and quality for mobile cards", () => {
+  const html = renderSessionCompactMeta(
+    {
+      quality: "partial",
+      projectPath: "/Users/abreto/Documents/Codex/project",
+      resumeRef: {
+        value: "019f3218-b3f0-7fc1-b6d7-141432908607",
+        command: "codex resume 019f3218-b3f0-7fc1-b6d7-141432908607",
+        label: "Codex resume id",
+        confidence: "medium",
+        sourceRefs: []
+      },
+      recentMessage: "long recent message"
+    },
+    "7月7日 00:37"
+  );
+
+  assert.match(html, /class="session-compact-meta"/);
+  assert.match(html, /7月7日 00:37 · partial/);
+  assert.doesNotMatch(html, /Users\/abreto/);
+  assert.doesNotMatch(html, /019f3218/);
+  assert.doesNotMatch(html, /long recent message/);
 });
 
 test("resume renderers omit empty placeholders when resumeRef is unavailable", () => {

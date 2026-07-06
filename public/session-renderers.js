@@ -7,6 +7,15 @@ export function renderSessionResumeLine(session) {
   return `<p class="resume-line">resume: ${escapeHtml(shortResumeValue(value))}</p>`;
 }
 
+export function renderSessionCompactMeta(session, formattedTime) {
+  const parts = [formattedTime, session?.quality].filter(Boolean);
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return `<p class="session-compact-meta">${escapeHtml(parts.join(" · "))}</p>`;
+}
+
 export function renderDetailResumeRef(session, copyId) {
   const value = textForResumeRef(session);
   if (!value) {

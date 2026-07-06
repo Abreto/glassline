@@ -211,6 +211,11 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.session-compact-meta,
+.detail-meta-mobile {
+  display: none;
+}
+
 .detail-pane {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -527,23 +532,116 @@ pre {
     grid-template-rows: auto auto;
   }
 
-  .session-list {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(260px, 86vw);
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 14px;
+  .pane-header {
+    padding: 10px 12px;
   }
 
-  .pane-header,
-  .detail-header,
+  .pane-header h1 {
+    font-size: 20px;
+  }
+
+  .pane-header p {
+    font-size: 12px;
+  }
+
+  .pane-header .icon-button {
+    height: 32px;
+    min-width: 32px;
+  }
+
+  .session-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(180px, 64vw);
+    height: 96px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 10px 10px;
+  }
+
+  .session-row {
+    gap: 5px;
+    height: 76px;
+    max-height: 76px;
+    overflow: hidden;
+    padding: 9px 10px;
+  }
+
+  .session-title strong {
+    display: -webkit-box;
+    font-size: 13px;
+    line-height: 1.2;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .session-row .badge-row {
+    display: none;
+  }
+
+  .session-row .session-meta-full {
+    display: none;
+  }
+
+  .session-row .resume-line {
+    display: none;
+  }
+
+  .session-row .recent {
+    display: none;
+  }
+
+  .session-compact-meta {
+    display: block;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail-header {
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  .detail-heading {
+    gap: 5px;
+  }
+
+  .detail-heading h2 {
+    font-size: 18px;
+  }
+
+  .detail-meta-full {
+    display: none;
+  }
+
+  .detail-meta-mobile {
+    display: block;
+  }
+
+  .resume-ref {
+    flex-wrap: nowrap;
+  }
+
+  .resume-ref code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .tabs {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding: 6px 12px;
+  }
+
+  .tab {
+    min-height: 30px;
+    padding: 5px 10px;
   }
 
   .timeline,
   .raw-view {
-    padding: 12px;
+    padding: 10px;
   }
 }

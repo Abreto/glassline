@@ -36,7 +36,36 @@ test("session pane and detail timeline use independent scroll containers", () =>
 test("mobile layout keeps the session list as a horizontal strip", () => {
   const media = extractMediaBlock("@media (max-width: 760px)");
   assertRuleIncludes(".app-shell", ["grid-template-columns: 1fr", "grid-template-rows: auto minmax(0, 1fr)"], media);
-  assertRuleIncludes(".session-list", ["grid-auto-flow: column", "overflow-x: auto", "overflow-y: hidden"], media);
+  assertRuleIncludes(".session-list", [
+    "grid-auto-flow: column",
+    "grid-auto-columns: minmax(180px, 64vw)",
+    "height: 96px",
+    "overflow-x: auto",
+    "overflow-y: hidden"
+  ], media);
+});
+
+test("mobile layout compacts session cards and hides long card fields", () => {
+  const media = extractMediaBlock("@media (max-width: 760px)");
+  assertRuleIncludes(".pane-header", ["padding: 10px 12px"], media);
+  assertRuleIncludes(".session-row", ["height: 76px", "max-height: 76px", "gap: 5px"], media);
+  assertRuleIncludes(".session-title strong", ["-webkit-line-clamp: 2"], media);
+  assertRuleIncludes(".session-row .badge-row", ["display: none"], media);
+  assertRuleIncludes(".session-row .session-meta-full", ["display: none"], media);
+  assertRuleIncludes(".session-row .resume-line", ["display: none"], media);
+  assertRuleIncludes(".session-row .recent", ["display: none"], media);
+  assertRuleIncludes(".session-compact-meta", ["display: block"], media);
+});
+
+test("mobile detail header keeps timeline higher in the viewport", () => {
+  const media = extractMediaBlock("@media (max-width: 760px)");
+  assertRuleIncludes(".detail-header", ["min-height: 0", "padding: 10px 12px"], media);
+  assertRuleIncludes(".detail-meta-full", ["display: none"], media);
+  assertRuleIncludes(".detail-meta-mobile", ["display: block"], media);
+  assertRuleIncludes(".resume-ref", ["flex-wrap: nowrap"], media);
+  assertRuleIncludes(".resume-ref code", ["overflow: hidden", "text-overflow: ellipsis", "white-space: nowrap"], media);
+  assertRuleIncludes(".tabs", ["padding: 6px 12px"], media);
+  assertRuleIncludes(".timeline,\n.raw-view", ["padding: 10px"], media);
 });
 
 test("message markdown keeps compact timeline typography", () => {
