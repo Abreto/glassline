@@ -1,5 +1,6 @@
 import { listAgentProcesses, processSession } from "./process-utils.mjs";
 import {
+  codexResumeRef,
   extractCodexSessionReference,
   getCodexSessionFileSession,
   getRawCodexSessionFile,
@@ -47,13 +48,14 @@ export function createCodexProvider(options = {}) {
       const processSessions = [];
 
       for (const processInfo of processes) {
+        const sessionRef = extractCodexSessionReference(processInfo.command ?? "");
         const session = processSession({
           providerId: "codex",
           providerName: "Codex",
           processInfo,
-          title: "Codex process"
+          title: "Codex process",
+          resumeRef: sessionRef ? codexResumeRef(sessionRef, [], "high") : undefined
         });
-        const sessionRef = extractCodexSessionReference(processInfo.command ?? "");
         const linkedSession = sessionRef
           ? sessionFileById.get(`codex:session-file:${sessionRef}`)
           : null;

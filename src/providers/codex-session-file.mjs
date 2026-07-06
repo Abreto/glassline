@@ -2,7 +2,11 @@ import { open, readFile, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { commandTokens } from "./process-utils.mjs";
+
 const CODEX_SESSION_PREFIX = "codex:session-file:";
+const SESSION_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const SESSION_UUID_PATTERN = new RegExp(`(${SESSION_UUID_SOURCE})`, "i");
 const SESSION_ID_PATTERN =
   /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?=\.jsonl$)/i;
 
@@ -11,14 +15,39 @@ export function resolveCodexHome(env = process.env) {
 }
 
 export function extractCodexSessionReference(command) {
-  const sessionIdMatch = command.match(
-    /--session-id(?:=|\s+)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-  );
-  if (sessionIdMatch) {
-    return sessionIdMatch[1];
+  const tokens = commandTokens(command);
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+
+    if (token === "--session-id" || token === "--resume" || token === "resume") {
+      const value = nextOptionValue(tokens, index);
+      const sessionId = value ? extractSessionUuid(value) : null;
+      if (sessionId) {
+        return sessionId;
+      }
+      continue;
+    }
+
+    if (token.startsWith("--session-id=") || token.startsWith("--resume=")) {
+      const sessionId = extractSessionUuid(token.slice(token.indexOf("=") + 1));
+      if (sessionId) {
+        return sessionId;
+      }
+    }
   }
 
-  return command.match(SESSION_ID_PATTERN)?.[1] ?? null;
+  return null;
+}
+
+export function codexResumeRef(sessionUuid, sourceRefs = [], confidence = "medium") {
+  return {
+    value: sessionUuid,
+    command: `codex resume ${sessionUuid}`,
+    label: "Codex resume id",
+    confidence,
+    sourceRefs
+  };
 }
 
 export async function listCodexSessionFileSessions({
@@ -220,6 +249,7 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
     lastUpdatedAt,
     recentMessage: latestText(timeline) ?? indexEntry?.thread_name,
     sources: [sourceRef],
+    resumeRef: codexResumeRef(sessionUuid, [sourceRef]),
     timeline,
     rawAvailable: true,
     parseErrors
@@ -253,6 +283,7 @@ async function summarizeCodexSessionFile(filePath, { indexEntry } = {}) {
     lastUpdatedAt,
     recentMessage: indexEntry?.thread_name,
     sources: [sourceRef],
+    resumeRef: codexResumeRef(sessionUuid, [sourceRef]),
     timeline: [],
     rawAvailable: true
   };
@@ -455,6 +486,7 @@ function staleIndexSession(indexEntry, filePath) {
     lastUpdatedAt: indexEntry.updated_at ?? new Date().toISOString(),
     recentMessage: indexEntry.thread_name,
     sources: [sourceRef],
+    resumeRef: codexResumeRef(indexEntry.id, [sourceRef]),
     timeline: [
       {
         id: `${glasslineSessionId(indexEntry.id)}:stale`,
@@ -540,6 +572,15 @@ function latestText(timeline) {
   });
 
   return latest?.content ?? latest?.output ?? latest?.summary ?? latest?.detail;
+}
+
+function nextOptionValue(tokens, index) {
+  const value = tokens[index + 1];
+  return value && !value.startsWith("-") ? value : null;
+}
+
+function extractSessionUuid(value) {
+  return String(value ?? "").match(SESSION_UUID_PATTERN)?.[1] ?? null;
 }
 
 function maxIso(left, right) {

@@ -45,12 +45,27 @@ function parseProcessLine(line) {
   };
 }
 
+export function commandTokens(command) {
+  const matches = String(command ?? "").match(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|\S+/g) ?? [];
+  return matches.map((token) => {
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'"))
+    ) {
+      return token.slice(1, -1);
+    }
+
+    return token;
+  });
+}
+
 export function processSession({
   providerId,
   providerName,
   processInfo,
   title,
   cwd,
+  resumeRef,
   now = new Date()
 }) {
   const updatedAt = now.toISOString();
@@ -74,6 +89,17 @@ export function processSession({
     lastUpdatedAt,
     recentMessage: processInfo.command,
     sources: [sourceRef],
+    ...(resumeRef
+      ? {
+          resumeRef: {
+            ...resumeRef,
+            sourceRefs:
+              Array.isArray(resumeRef.sourceRefs) && resumeRef.sourceRefs.length > 0
+                ? resumeRef.sourceRefs
+                : [sourceRef]
+          }
+        }
+      : {}),
     timeline: [
       {
         id: `${providerId}:process:${processInfo.pid}:status`,

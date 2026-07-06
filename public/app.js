@@ -8,6 +8,11 @@ import {
   textForTimelineItem,
   titleForTimelineItem
 } from "./timeline-renderers.js";
+import {
+  renderDetailResumeRef,
+  renderSessionResumeLine,
+  textForResumeRef
+} from "./session-renderers.js";
 
 const state = {
   sessions: [],
@@ -77,6 +82,8 @@ async function selectSession(id) {
 }
 
 async function renderSelectedSession({ focusLatestMessage = false } = {}) {
+  state.copyText.clear();
+
   if (!state.selectedId) {
     detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>No sessions</h2></div>';
     timelineEl.innerHTML = '<p class="empty-state">No provider data available.</p>';
@@ -123,16 +130,20 @@ function renderSessionRow(session) {
         ${session.sources.map((source) => badge(`${source.kind}:${source.confidence}`)).join("")}
       </div>
       <p class="meta-line">${formatTime(session.lastUpdatedAt)} · ${escapeHtml(session.projectPath ?? "Unknown path")}</p>
+      ${renderSessionResumeLine(session)}
       ${recent}
     </button>
   `;
 }
 
 function renderDetailHeader(session) {
+  const resumeCopyId = session.resumeRef ? registerCopyText(textForResumeRef(session)) : null;
+
   detailHeaderEl.innerHTML = `
     <div class="detail-heading">
       <h2>${escapeHtml(session.title)}</h2>
       <p class="meta-line">${escapeHtml(session.providerName)} · ${escapeHtml(session.projectPath ?? "Unknown path")} · ${formatTime(session.lastUpdatedAt)}</p>
+      ${renderDetailResumeRef(session, resumeCopyId)}
       <div class="badge-row">
         ${badge(session.status, toneForStatus(session.status))}
         ${badge(session.quality, toneForQuality(session.quality))}
@@ -143,7 +154,6 @@ function renderDetailHeader(session) {
 }
 
 function renderTimeline(session) {
-  state.copyText.clear();
   timelineEl.innerHTML = session.timeline.length
     ? groupTimelineItems(session.timeline).map(renderTimelineItem).join("")
     : '<p class="empty-state">No timeline items from current sources.</p>';

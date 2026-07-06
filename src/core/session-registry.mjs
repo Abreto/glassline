@@ -71,6 +71,7 @@ function normalizeSession(provider, session) {
   const timeline = normalizeTimeline(session.timeline, sources);
   const turns = normalizeTurns(session.turns, sources);
   const lastUpdatedAt = session.lastUpdatedAt ?? session.startedAt ?? now;
+  const resumeRef = normalizeResumeRef(session.resumeRef, sources);
 
   return {
     id: session.id,
@@ -84,9 +85,27 @@ function normalizeSession(provider, session) {
     lastUpdatedAt,
     recentMessage: session.recentMessage ?? latestText(timeline),
     sources,
+    ...(resumeRef ? { resumeRef } : {}),
     turns,
     timeline,
     rawAvailable: session.rawAvailable ?? false
+  };
+}
+
+function normalizeResumeRef(resumeRef, sessionSources) {
+  if (!resumeRef || typeof resumeRef.value !== "string" || resumeRef.value.length === 0) {
+    return undefined;
+  }
+
+  return {
+    value: resumeRef.value,
+    command: String(resumeRef.command ?? resumeRef.value),
+    label: String(resumeRef.label ?? "Resume id"),
+    confidence: resumeRef.confidence ?? "medium",
+    sourceRefs:
+      Array.isArray(resumeRef.sourceRefs) && resumeRef.sourceRefs.length > 0
+        ? resumeRef.sourceRefs
+        : sessionSources
   };
 }
 

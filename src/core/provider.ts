@@ -76,6 +76,14 @@ export interface Turn {
   items: TimelineItem[];
 }
 
+export interface ResumeRef {
+  value: string;
+  command: string;
+  label: string;
+  confidence: SourceConfidence;
+  sourceRefs: SourceRef[];
+}
+
 export interface Session {
   id: string;
   providerId: ProviderId;
@@ -88,6 +96,7 @@ export interface Session {
   lastUpdatedAt: string;
   recentMessage?: string;
   sources: SourceRef[];
+  resumeRef?: ResumeRef;
   turns?: Turn[];
   timeline: TimelineItem[];
   rawAvailable?: boolean;

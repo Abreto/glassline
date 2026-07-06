@@ -94,6 +94,7 @@ h2 {
 
 .pane-header p,
 .meta-line,
+.resume-line,
 .recent,
 .empty-state {
   color: var(--muted);
@@ -206,6 +207,10 @@ h2 {
   -webkit-line-clamp: 2;
 }
 
+.resume-line {
+  overflow-wrap: anywhere;
+}
+
 .detail-pane {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -229,6 +234,33 @@ h2 {
 
 .detail-heading h2 {
   overflow-wrap: anywhere;
+}
+
+.resume-ref {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 7px;
+  min-width: 0;
+}
+
+.resume-ref code {
+  background: #eef2f7;
+  border: 1px solid #dbe4ee;
+  border-radius: 5px;
+  color: var(--ink);
+  font:
+    12px / 1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+  padding: 2px 5px;
+}
+
+.resume-copy {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 7px;
 }
 
 .tabs {

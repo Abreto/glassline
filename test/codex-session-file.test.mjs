@@ -39,6 +39,9 @@ test("parseCodexSessionFile extracts metadata, messages, and skips malformed lin
   assert.equal(session.sources[0].kind, "session-file");
   assert.equal(session.sources[0].confidence, "medium");
   assert.equal(session.sources[0].path, fixtureSessionPath);
+  assert.equal(session.resumeRef.value, "11111111-1111-4111-8111-111111111111");
+  assert.equal(session.resumeRef.command, "codex resume 11111111-1111-4111-8111-111111111111");
+  assert.equal(session.resumeRef.confidence, "medium");
   assert.equal(session.parseErrors, 1);
 
   const messages = session.timeline.filter((item) => item.type === "message");
@@ -105,6 +108,7 @@ test("summary session uses file mtime when the index is stale", async () => {
 
   assert.equal(session.lastUpdatedAt, "2026-07-05T09:20:00.000Z");
   assert.equal(session.sources[0].updatedAt, "2026-07-05T09:20:00.000Z");
+  assert.equal(session.resumeRef.value, sessionId);
 });
 
 test("summary sessions keep the newest file when rollout files share a session id", async () => {
@@ -248,11 +252,17 @@ test("codex provider list uses session-file summaries and detail resolves full t
 
   assert.equal(summary.quality, "partial");
   assert.deepEqual(summary.timeline, []);
+  assert.equal(summary.resumeRef.value, "11111111-1111-4111-8111-111111111111");
   assert.equal(summary.rawAvailable, true);
+  assert.equal(detail.resumeRef.value, "11111111-1111-4111-8111-111111111111");
   assert.equal(detail.timeline.length > 0, true);
 });
 
 test("extractCodexSessionReference reads session ids and resume paths", () => {
+  assert.equal(
+    extractCodexSessionReference("codex resume 11111111-1111-4111-8111-111111111111"),
+    "11111111-1111-4111-8111-111111111111"
+  );
   assert.equal(
     extractCodexSessionReference("codex --session-id 11111111-1111-4111-8111-111111111111"),
     "11111111-1111-4111-8111-111111111111"
@@ -263,6 +273,30 @@ test("extractCodexSessionReference reads session ids and resume paths", () => {
     ),
     "11111111-1111-4111-8111-111111111111"
   );
+  assert.equal(
+    extractCodexSessionReference("codex --resume 11111111-1111-4111-8111-111111111111"),
+    "11111111-1111-4111-8111-111111111111"
+  );
+});
+
+test("codex provider process-only session includes resumeRef from command", async () => {
+  const provider = createCodexProvider({
+    codexHome: fixtureRoot,
+    listAgentProcesses: async () => [
+      {
+        pid: 789,
+        startedAt: "2026-07-05T09:40:00.000Z",
+        command: "codex resume 99999999-9999-4999-8999-999999999999"
+      }
+    ]
+  });
+
+  const sessions = await provider.listSessions();
+  const processOnly = sessions.find((session) => session.id === "codex:process:789");
+
+  assert.equal(processOnly.resumeRef.value, "99999999-9999-4999-8999-999999999999");
+  assert.equal(processOnly.resumeRef.command, "codex resume 99999999-9999-4999-8999-999999999999");
+  assert.equal(processOnly.resumeRef.confidence, "high");
 });
 
 test("codex provider merges matching process sources into session-file sessions", async () => {

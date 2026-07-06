@@ -43,6 +43,13 @@ test("collectSessions merges providers, sorts by last update, and preserves sour
             startedAt: "2026-07-05T09:01:00.000Z",
             lastUpdatedAt: "2026-07-05T09:05:00.000Z",
             sources: [{ kind: "session-file", confidence: "medium", label: "transcript jsonl" }],
+            resumeRef: {
+              value: "session-123",
+              command: "claude -r session-123",
+              label: "Claude resume id",
+              confidence: "medium",
+              sourceRefs: [{ kind: "session-file", confidence: "medium", label: "transcript jsonl" }]
+            },
             timeline: []
           }
         ];
@@ -58,6 +65,8 @@ test("collectSessions merges providers, sorts by last update, and preserves sour
   );
   assert.equal(sessions[0].providerName, "Claude Code");
   assert.equal(sessions[0].quality, "complete");
+  assert.equal(sessions[0].resumeRef.value, "session-123");
+  assert.equal(sessions[0].resumeRef.command, "claude -r session-123");
   assert.equal(sessions[1].sources[0].kind, "process");
 });
 
@@ -140,4 +149,6 @@ test("provider contract exposes the Turn model", async () => {
   const providerContract = await readFile(new URL("../src/core/provider.ts", import.meta.url), "utf8");
 
   assert.match(providerContract, /export interface Turn/);
+  assert.match(providerContract, /export interface ResumeRef/);
+  assert.match(providerContract, /resumeRef\?: ResumeRef/);
 });
