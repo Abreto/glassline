@@ -54,6 +54,12 @@ test("isIgnorableLaunchctlError identifies missing or unloaded services", () => 
   assert.equal(isIgnorableLaunchctlError(Object.assign(new Error("No such process"), { code: 3 })), true);
   assert.equal(isIgnorableLaunchctlError({ stderr: "Could not find service \"com.glassline.local\"" }), true);
   assert.equal(isIgnorableLaunchctlError({ stderr: "service is not loaded" }), true);
+  assert.equal(
+    isIgnorableLaunchctlError({
+      stderr: "Boot-out failed: 5: Input/output error\nTry re-running the command as root for richer errors.\n"
+    }),
+    true
+  );
   assert.equal(isIgnorableLaunchctlError({ stderr: "Operation not permitted" }), false);
 });
 
@@ -76,7 +82,6 @@ test("uninstallLaunchdService is idempotent for missing plist and unloaded servi
 
   assert.deepEqual(calls, [
     ["launchctl", "bootout", "gui/501/com.glassline.local"],
-    ["launchctl", "bootout", "gui/501", "/Users/me/Library/LaunchAgents/com.glassline.local.plist"],
     ["launchctl", "unload", "/Users/me/Library/LaunchAgents/com.glassline.local.plist"],
     ["unlink", "/Users/me/Library/LaunchAgents/com.glassline.local.plist"]
   ]);

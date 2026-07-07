@@ -31,6 +31,8 @@ For self-hosted macOS use, Glassline can install a user-level `launchd` service:
 npm run install-launchd
 ```
 
+This is a user LaunchAgent and does not require `sudo`. If launchctl suggests re-running as root while installing Glassline, treat that as a bug and do not retry with `sudo`.
+
 The service label is `com.glassline.local`. It runs the current repo with the Node executable used by npm, keeps Glassline bound to `127.0.0.1:6280`, and starts with:
 
 - `HOST=127.0.0.1`

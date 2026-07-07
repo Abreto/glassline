@@ -61,7 +61,6 @@ export async function uninstallLaunchdService({
   log = console.log
 }) {
   await runIgnoringMissing(runLaunchctl, ["bootout", serviceTarget(uid)], log);
-  await runIgnoringMissing(runLaunchctl, ["bootout", userDomain(uid), paths.plistPath], log);
   await runIgnoringMissing(runLaunchctl, ["unload", paths.plistPath], log);
 
   try {
@@ -82,6 +81,8 @@ export function isIgnorableLaunchctlError(error) {
     text.includes("could not find service") ||
     text.includes("no such process") ||
     text.includes("not loaded") ||
+    text.includes("boot-out failed: 5") ||
+    text.includes("input/output error") ||
     text.includes("no such file")
   );
 }
