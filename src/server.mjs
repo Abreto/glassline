@@ -8,6 +8,7 @@ import { collectSessions, getRawSession, getSession } from "./core/session-regis
 import { createClaudeCodeProvider } from "./providers/claude-code.mjs";
 import { createCodexProvider } from "./providers/codex.mjs";
 import { createMockProvider } from "./providers/mock.mjs";
+import { startListening } from "./server-listen.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, "../public");
@@ -66,9 +67,7 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, host, () => {
-  console.log(`Glassline is running at http://${host}:${port}`);
-});
+startListening(server, { host, port });
 
 async function sendStatic(response, pathname) {
   const safePath = pathname === "/" ? "/index.html" : pathname;

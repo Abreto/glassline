@@ -20,6 +20,18 @@ test("codex matcher includes CLI sessions and excludes desktop helper processes"
     }),
     false
   );
+  assert.equal(
+    matchesCodexAgentProcess({
+      command: "/Users/me/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService"
+    }),
+    false
+  );
+  assert.equal(
+    matchesCodexAgentProcess({
+      command: "/Users/me/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/Codex Computer Use"
+    }),
+    false
+  );
 });
 
 test("claude-code matcher includes CLI sessions and excludes daemon-only processes", () => {

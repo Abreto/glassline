@@ -25,7 +25,9 @@ export function matchesCodexAgentProcess(processInfo) {
     "crashpad",
     "(renderer)",
     "(service)",
+    "codex computer use",
     "skycomputeruseclient",
+    "skycomputeruseservice",
     "openai.chatgpt"
   ].some((fragment) => lower.includes(fragment));
 }

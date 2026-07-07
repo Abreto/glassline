@@ -14,6 +14,7 @@ import {
   renderSessionResumeLine,
   textForResumeRef
 } from "./session-renderers.js";
+import { renderErrorState, requestJson } from "./api-client.js";
 
 const state = {
   sessions: [],
@@ -62,8 +63,24 @@ window.setInterval(() => loadSessions({ preserveSelection: true }), 8000);
 
 async function loadSessions({ preserveSelection }) {
   countEl.textContent = "Refreshing";
-  const response = await fetch("/api/sessions");
-  const payload = await response.json();
+  let payload;
+
+  try {
+    payload = await requestJson("/api/sessions", { label: "Unable to load sessions" });
+  } catch (error) {
+    state.sessions = [];
+    state.selectedId = null;
+    listEl.innerHTML = "";
+    countEl.textContent = "Refresh failed";
+    detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>Unable to load sessions</h2></div>';
+    timelineEl.innerHTML = renderErrorState(
+      "Unable to load sessions",
+      detailForError(error, "Unable to load sessions")
+    );
+    rawEl.innerHTML = "";
+    return;
+  }
+
   state.sessions = payload.sessions ?? [];
 
   if (!preserveSelection || !state.sessions.some((session) => session.id === state.selectedId)) {
@@ -92,11 +109,24 @@ async function renderSelectedSession({ focusLatestMessage = false } = {}) {
     return;
   }
 
-  const response = await fetch(`/api/sessions/${encodeURIComponent(state.selectedId)}`);
-  const payload = await response.json();
+  let payload;
+
+  try {
+    payload = await requestJson(`/api/sessions/${encodeURIComponent(state.selectedId)}`, {
+      label: "Unable to load session"
+    });
+  } catch (error) {
+    detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>Unable to load session</h2></div>';
+    timelineEl.innerHTML = renderErrorState(
+      "Unable to load session",
+      detailForError(error, "Unable to load session")
+    );
+    return;
+  }
+
   const session = payload.session;
   if (!session) {
-    timelineEl.innerHTML = '<p class="empty-state">Session disappeared.</p>';
+    timelineEl.innerHTML = renderErrorState("Session disappeared", "The selected session is no longer available.");
     return;
   }
 
@@ -187,12 +217,28 @@ function renderTimelineItem(item) {
 }
 
 async function renderRaw() {
+  if (!state.selectedId) {
+    rawEl.innerHTML = renderErrorState("Raw data unavailable", "No session is selected.");
+    return;
+  }
+
   rawEl.innerHTML = '<p class="empty-state">Loading raw data.</p>';
-  const response = await fetch(`/api/raw/${encodeURIComponent(state.selectedId)}`);
-  const payload = await response.json();
+  let payload;
+
+  try {
+    payload = await requestJson(`/api/raw/${encodeURIComponent(state.selectedId)}`, {
+      label: "Unable to load raw data"
+    });
+  } catch (error) {
+    rawEl.innerHTML = renderErrorState(
+      "Unable to load raw data",
+      detailForError(error, "Unable to load raw data")
+    );
+    return;
+  }
 
   if (!payload.raw) {
-    rawEl.innerHTML = '<p class="empty-state">Raw data unavailable.</p>';
+    rawEl.innerHTML = renderErrorState("Raw data unavailable", "The provider did not return raw source data.");
     return;
   }
 
@@ -307,6 +353,12 @@ function formatTime(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function detailForError(error, title) {
+  const message = error instanceof Error ? error.message : String(error);
+  const prefix = `${title}: `;
+  return message.startsWith(prefix) ? message.slice(prefix.length) : message;
 }
 
 function escapeHtml(value) {
