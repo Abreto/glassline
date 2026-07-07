@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  captureOpenDisclosureIds,
   findLatestTimelineFocusBlock,
   groupTimelineItems,
   renderActivityGroup,
   renderCommandBody,
   renderMessageBody,
+  restoreOpenDisclosureIds,
   textForTimelineItem,
   shouldFocusLatestTimeline
 } from "../public/timeline-renderers.js";
@@ -122,7 +124,7 @@ test("renderActivityGroup summarizes counts and failed actions without opening b
     ]
   });
 
-  assert.match(html, /<details class="activity-group" data-tone="bad">/);
+  assert.match(html, /<details class="activity-group" data-tone="bad" data-disclosure-id="activity:c1">/);
   assert.match(html, /5 actions/);
   assert.match(html, /2 commands/);
   assert.match(html, /1 tool/);
@@ -131,6 +133,51 @@ test("renderActivityGroup summarizes counts and failed actions without opening b
   assert.match(html, /2 failed/);
   assert.match(html, /class="activity-item"/);
   assert.doesNotMatch(html, /<details class="activity-group"[^>]*open/);
+});
+
+test("activity group disclosure id stays stable when more actions arrive", () => {
+  const firstRender = renderActivityGroup({
+    type: "activity_group",
+    id: "activity:c1:1",
+    items: [command("c1")]
+  });
+  const nextRender = renderActivityGroup({
+    type: "activity_group",
+    id: "activity:c1:2",
+    items: [command("c1"), tool("t1")]
+  });
+
+  assert.match(firstRender, /data-disclosure-id="activity:c1"/);
+  assert.match(nextRender, /data-disclosure-id="activity:c1"/);
+  assert.doesNotMatch(nextRender, /data-disclosure-id="activity:c1:2"/);
+});
+
+test("nested disclosure ids use timeline item ids with output labels", () => {
+  const commandHtml = renderCommandBody(command("c1"));
+  const groupHtml = renderActivityGroup({
+    type: "activity_group",
+    items: [tool("t1"), fileChange("f1")]
+  });
+
+  assert.match(commandHtml, /data-disclosure-id="c1:output"/);
+  assert.match(groupHtml, /data-disclosure-id="t1:input"/);
+  assert.match(groupHtml, /data-disclosure-id="t1:output"/);
+  assert.match(groupHtml, /data-disclosure-id="f1:diff"/);
+});
+
+test("captureOpenDisclosureIds and restoreOpenDisclosureIds preserve matching open details", () => {
+  const closed = detail("activity:c1", false);
+  const open = detail("c1:output", true);
+  const missing = detail("", true);
+  const restored = detail("c1:output", false);
+  const newDisclosure = detail("t1:output", false);
+
+  const captured = captureOpenDisclosureIds(fakeRoot([closed, open, missing]));
+  restoreOpenDisclosureIds(fakeRoot([restored, newDisclosure]), captured);
+
+  assert.deepEqual([...captured], ["c1:output"]);
+  assert.equal(restored.open, true);
+  assert.equal(newDisclosure.open, false);
 });
 
 test("findLatestTimelineFocusBlock selects the last message block", () => {
@@ -217,6 +264,23 @@ function timelineBlock(type, id) {
     id,
     dataset: {
       timelineType: type
+    }
+  };
+}
+
+function detail(id, open) {
+  return {
+    dataset: {
+      disclosureId: id
+    },
+    open
+  };
+}
+
+function fakeRoot(disclosures) {
+  return {
+    querySelectorAll(selector) {
+      return selector === "details[data-disclosure-id]" ? disclosures : [];
     }
   };
 }

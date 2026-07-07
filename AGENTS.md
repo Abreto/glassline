@@ -79,6 +79,7 @@
 
 - Session list 按后端 `lastUpdatedAt` 降序显示；自动刷新间隔是 8 秒。
 - 打开或切换 session 时，timeline 自动定位到最新 message；后台刷新不会强制滚动，避免打断阅读。
+- 当前选中 session 刷新时会保留已经展开的 `activity_group` 和二级 details；切换 session 或浏览器重载后重置展开状态。
 - 主布局是独立滚动容器：
   - desktop：左侧 `.session-list` 自己滚动，右侧 `.timeline` / `.raw-view` 自己滚动。
   - mobile：顶部横向 session strip，下面 timeline 独立纵向滚动，`body` 不作为主滚动容器。

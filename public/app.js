@@ -1,9 +1,11 @@
 import {
+  captureOpenDisclosureIds,
   findLatestTimelineFocusBlock,
   groupTimelineItems,
   renderActivityGroup,
   renderCommandBody,
   renderMessageBody,
+  restoreOpenDisclosureIds,
   shouldFocusLatestTimeline,
   textForTimelineItem,
   titleForTimelineItem
@@ -19,6 +21,7 @@ import { renderErrorState, requestJson } from "./api-client.js";
 const state = {
   sessions: [],
   selectedId: null,
+  renderedTimelineSessionId: null,
   view: "timeline",
   copyText: new Map()
 };
@@ -70,6 +73,7 @@ async function loadSessions({ preserveSelection }) {
   } catch (error) {
     state.sessions = [];
     state.selectedId = null;
+    state.renderedTimelineSessionId = null;
     listEl.innerHTML = "";
     countEl.textContent = "Refresh failed";
     detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>Unable to load sessions</h2></div>';
@@ -103,6 +107,7 @@ async function renderSelectedSession({ focusLatestMessage = false } = {}) {
   state.copyText.clear();
 
   if (!state.selectedId) {
+    state.renderedTimelineSessionId = null;
     detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>No sessions</h2></div>';
     timelineEl.innerHTML = '<p class="empty-state">No provider data available.</p>';
     countEl.textContent = "0 sessions";
@@ -126,6 +131,7 @@ async function renderSelectedSession({ focusLatestMessage = false } = {}) {
 
   const session = payload.session;
   if (!session) {
+    state.renderedTimelineSessionId = null;
     timelineEl.innerHTML = renderErrorState("Session disappeared", "The selected session is no longer available.");
     return;
   }
@@ -187,9 +193,15 @@ function renderDetailHeader(session) {
 }
 
 function renderTimeline(session) {
+  const shouldRestoreDisclosures = state.renderedTimelineSessionId === session.id;
+  const openDisclosureIds = shouldRestoreDisclosures ? captureOpenDisclosureIds(timelineEl) : new Set();
   timelineEl.innerHTML = session.timeline.length
     ? groupTimelineItems(session.timeline).map(renderTimelineItem).join("")
     : '<p class="empty-state">No timeline items from current sources.</p>';
+  if (shouldRestoreDisclosures) {
+    restoreOpenDisclosureIds(timelineEl, openDisclosureIds);
+  }
+  state.renderedTimelineSessionId = session.id;
 }
 
 function renderTimelineItem(item) {

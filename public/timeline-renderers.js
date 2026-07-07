@@ -29,10 +29,25 @@ export function shouldFocusLatestTimeline({ preserveSelection } = {}) {
   return !preserveSelection;
 }
 
+export function captureOpenDisclosureIds(root) {
+  return new Set(
+    [...root.querySelectorAll("details[data-disclosure-id]")]
+      .filter((node) => node.open)
+      .map((node) => node.dataset.disclosureId)
+      .filter(Boolean)
+  );
+}
+
+export function restoreOpenDisclosureIds(root, openIds) {
+  for (const node of root.querySelectorAll("details[data-disclosure-id]")) {
+    node.open = openIds.has(node.dataset.disclosureId);
+  }
+}
+
 export function renderCommandBody(item) {
   return `
     <pre class="command-text">${escapeHtml(item.command)}</pre>
-    ${item.output ? renderCollapsedOutput(item.output) : ""}
+    ${item.output ? renderCollapsedOutput(item.output, disclosureId(item, "output")) : ""}
   `;
 }
 
@@ -127,7 +142,7 @@ export function renderMarkdown(value) {
 export function renderActivityGroup(group) {
   const tone = group.items.some(isFailedAction) ? "bad" : "neutral";
   return `
-    <details class="activity-group" data-tone="${tone}">
+    <details class="activity-group" data-tone="${tone}" data-disclosure-id="${escapeHtml(activityGroupDisclosureId(group))}">
       <summary>${escapeHtml(activitySummary(group.items))}</summary>
       <div class="activity-items">
         ${group.items.map(renderActivityItem).join("")}
@@ -182,7 +197,7 @@ function flushActions(grouped, actions) {
   }
 
   grouped.push({
-    id: `activity:${actions[0].id}:${actions.length}`,
+    id: `activity:${actions[0].id}`,
     type: "activity_group",
     createdAt: actions[0].createdAt,
     items: actions
@@ -226,25 +241,34 @@ function bodyForActivityItem(item) {
 function renderToolCallBody(item) {
   return `
     <p>${escapeHtml(item.name ?? "tool")} · ${escapeHtml(item.status ?? "unknown")}</p>
-    ${item.input !== undefined ? renderCollapsedOutputWithLabel(formatUnknown(item.input), "Show input") : ""}
-    ${item.output !== undefined ? renderCollapsedOutputWithLabel(formatUnknown(item.output), "Show output") : ""}
+    ${
+      item.input !== undefined
+        ? renderCollapsedOutputWithLabel(formatUnknown(item.input), "Show input", disclosureId(item, "input"))
+        : ""
+    }
+    ${
+      item.output !== undefined
+        ? renderCollapsedOutputWithLabel(formatUnknown(item.output), "Show output", disclosureId(item, "output"))
+        : ""
+    }
   `;
 }
 
 function renderFileChangeBody(item) {
   return `
     <p>${escapeHtml(item.summary ?? item.path)}</p>
-    ${item.diff ? renderCollapsedOutputWithLabel(item.diff, "Show diff") : ""}
+    ${item.diff ? renderCollapsedOutputWithLabel(item.diff, "Show diff", disclosureId(item, "diff")) : ""}
   `;
 }
 
-function renderCollapsedOutput(output) {
-  return renderCollapsedOutputWithLabel(output, "Show output");
+function renderCollapsedOutput(output, id) {
+  return renderCollapsedOutputWithLabel(output, "Show output", id);
 }
 
-function renderCollapsedOutputWithLabel(output, label) {
+function renderCollapsedOutputWithLabel(output, label, id) {
+  const disclosureAttr = id ? ` data-disclosure-id="${escapeHtml(id)}"` : "";
   return `
-    <details class="command-output">
+    <details class="command-output"${disclosureAttr}>
       <summary>${escapeHtml(outputSummary(output, label))}</summary>
       <pre>${escapeHtml(output)}</pre>
     </details>
@@ -284,6 +308,14 @@ function activitySummary(items) {
 
 function plural(count, singular, pluralLabel = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralLabel}`;
+}
+
+function activityGroupDisclosureId(group) {
+  return `activity:${group.items[0]?.id ?? group.id ?? "unknown"}`;
+}
+
+function disclosureId(item, suffix) {
+  return item.id ? `${item.id}:${suffix}` : "";
 }
 
 function renderParagraph(lines) {
