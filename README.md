@@ -23,6 +23,43 @@ Runtime options:
 - `GLASSLINE_MOCK=0`: hide sample provider data.
 - `CODEX_HOME`: override the Codex data directory, default `~/.codex`.
 
+## macOS Persistent Local Service
+
+For self-hosted macOS use, Glassline can install a user-level `launchd` service:
+
+```sh
+npm run install-launchd
+```
+
+The service label is `com.glassline.local`. It runs the current repo with the Node executable used by npm, keeps Glassline bound to `127.0.0.1:6280`, and starts with:
+
+- `HOST=127.0.0.1`
+- `PORT=6280`
+- `GLASSLINE_MOCK=0`
+
+Check service state:
+
+```sh
+launchctl print gui/$UID/com.glassline.local
+```
+
+Logs are retained at:
+
+```text
+~/Library/Logs/glassline/stdout.log
+~/Library/Logs/glassline/stderr.log
+```
+
+Uninstall the local service:
+
+```sh
+npm run uninstall-launchd
+```
+
+Uninstalling stops the launch agent and removes `~/Library/LaunchAgents/com.glassline.local.plist`. It keeps the log directory for troubleshooting.
+
+Cloudflare Tunnel and Cloudflare Access are configured separately. The launchd service only keeps the local Glassline process running; it does not install or manage `cloudflared`.
+
 ## Test
 
 ```sh

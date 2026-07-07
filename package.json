@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.mjs",
+    "install-launchd": "node scripts/install-launchd.mjs",
+    "uninstall-launchd": "node scripts/uninstall-launchd.mjs",
     "test": "node --test"
   },
   "engines": {
