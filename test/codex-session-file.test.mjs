@@ -67,6 +67,148 @@ test("parseCodexSessionFile uses the newest JSONL event when the index is stale"
   assert.equal(session.sources[0].updatedAt, "2026-07-05T09:00:14.000Z");
 });
 
+test("parseCodexSessionFile derives a short title from Codex transcript blobs", async () => {
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-title-"));
+  const sessionId = "55555555-5555-4555-8555-555555555555";
+  const sessionDir = path.join(codexHome, "sessions/2026/07/05");
+  const sessionPath = path.join(
+    sessionDir,
+    `rollout-2026-07-05T09-00-00-${sessionId}.jsonl`
+  );
+  const transcriptBlob = [
+    "The following is the Codex agent history whose request action you are assessing.",
+    ">>> TRANSCRIPT START",
+    "[1] user: Find useful arbitrage opportunities in World Cup markets",
+    "",
+    "[2] tool exec_command call: {\"cmd\":\"python3 scan.py\"}",
+    "[3] tool exec_command result: Output:",
+    "market line that should not become the session title",
+    ">>> TRANSCRIPT END"
+  ].join("\n");
+
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(
+    sessionPath,
+    [
+      JSON.stringify({
+        timestamp: "2026-07-05T09:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          session_id: sessionId,
+          timestamp: "2026-07-05T09:00:00.000Z",
+          cwd: "/repo/glassline"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-07-05T09:00:05.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: transcriptBlob
+        }
+      })
+    ].join("\n")
+  );
+
+  const session = await parseCodexSessionFile(sessionPath);
+  const userMessage = session.timeline.find((item) => item.type === "message" && item.role === "user");
+
+  assert.equal(session.title, "Find useful arbitrage opportunities in World Cup markets");
+  assert.equal(userMessage.content, transcriptBlob);
+});
+
+test("parseCodexSessionFile clamps plain long prompt titles without changing messages", async () => {
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-title-"));
+  const sessionId = "66666666-6666-4666-8666-666666666666";
+  const sessionDir = path.join(codexHome, "sessions/2026/07/05");
+  const sessionPath = path.join(
+    sessionDir,
+    `rollout-2026-07-05T09-00-00-${sessionId}.jsonl`
+  );
+  const longPrompt = `Summarize ${"very detailed market data ".repeat(10)}`.trim();
+
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(
+    sessionPath,
+    [
+      JSON.stringify({
+        timestamp: "2026-07-05T09:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          session_id: sessionId,
+          timestamp: "2026-07-05T09:00:00.000Z",
+          cwd: "/repo/glassline"
+        }
+      }),
+      JSON.stringify({
+        timestamp: "2026-07-05T09:00:05.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: longPrompt
+        }
+      })
+    ].join("\n")
+  );
+
+  const session = await parseCodexSessionFile(sessionPath);
+  const userMessage = session.timeline.find((item) => item.type === "message" && item.role === "user");
+
+  assert.equal(session.title.length <= 96, true);
+  assert.equal(session.title, `${longPrompt.slice(0, 93).trimEnd()}...`);
+  assert.equal(userMessage.content, longPrompt);
+});
+
+test("Codex index titles are clamped for summary and stale sessions", async () => {
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-title-"));
+  const parsedSessionId = "77777777-7777-4777-8777-777777777777";
+  const staleSessionId = "88888888-8888-4888-8888-888888888888";
+  const sessionDir = path.join(codexHome, "sessions/2026/07/05");
+  const sessionPath = path.join(
+    sessionDir,
+    `rollout-2026-07-05T09-00-00-${parsedSessionId}.jsonl`
+  );
+  const longIndexTitle = `The following is a very long generated Codex session title ${"with extra context ".repeat(8)}`.trim();
+
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(
+    path.join(codexHome, "session_index.jsonl"),
+    [
+      JSON.stringify({
+        id: parsedSessionId,
+        thread_name: longIndexTitle,
+        updated_at: "2026-07-05T09:10:00.000Z"
+      }),
+      JSON.stringify({
+        id: staleSessionId,
+        thread_name: longIndexTitle,
+        updated_at: "2026-07-05T09:20:00.000Z"
+      })
+    ].join("\n")
+  );
+  await writeFile(
+    sessionPath,
+    `${JSON.stringify({
+      timestamp: "2026-07-05T09:00:00.000Z",
+      type: "session_meta",
+      payload: {
+        session_id: parsedSessionId,
+        timestamp: "2026-07-05T09:00:00.000Z",
+        cwd: "/repo/glassline"
+      }
+    })}\n`
+  );
+
+  const sessions = await listCodexSessionFileSessions({ codexHome, summaryOnly: true });
+  const parsed = sessions.find((session) => session.id === `codex:session-file:${parsedSessionId}`);
+  const stale = sessions.find((session) => session.id === `codex:session-file:${staleSessionId}`);
+
+  assert.equal(parsed.title, `${longIndexTitle.slice(0, 93).trimEnd()}...`);
+  assert.equal(stale.title, `${longIndexTitle.slice(0, 93).trimEnd()}...`);
+  assert.equal(parsed.recentMessage, longIndexTitle);
+  assert.equal(stale.recentMessage, longIndexTitle);
+});
+
 test("summary session uses file mtime when the index is stale", async () => {
   const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-home-"));
   const sessionId = "33333333-3333-4333-8333-333333333333";

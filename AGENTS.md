@@ -63,6 +63,7 @@
   - 进程发现使用 `ps -axo pid=,lstart=,command=`，匹配 `codex` / `codex-cli`，排除 app helper、daemon、Crashpad、Codex Computer Use 等非用户 session 进程。
   - session-file 读取 `session_index.jsonl` 和 `sessions/**/*.jsonl`。
   - 列表模式使用 lightweight summary；详情和 raw endpoint 按需读取完整 JSONL。
+  - session title 要保持短标题：优先使用清理后的 `thread_name`；缺失或过长时，详情 parse 从第一条有意义的 user 请求提取标题；最终标题会截断到 96 字符，不能把完整 transcript/prompt blob 当 title。
   - `session-file` session id 形如 `codex:session-file:<uuid>`，质量通常是 `partial`。
   - `process-only` session id 形如 `codex:process:<pid>`，质量是 `process-only`。
   - 可确定 session id 时会把 process source 合并进匹配的 session-file session，并把状态标为 `running`；不能确定时保留 process-only，不用 cwd/时间窗口猜测。

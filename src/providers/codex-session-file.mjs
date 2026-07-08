@@ -9,6 +9,7 @@ const SESSION_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 const SESSION_UUID_PATTERN = new RegExp(`(${SESSION_UUID_SOURCE})`, "i");
 const SESSION_ID_PATTERN =
   /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?=\.jsonl$)/i;
+const SESSION_TITLE_MAX_LENGTH = 96;
 
 export function resolveCodexHome(env = process.env) {
   return env.CODEX_HOME || path.join(os.homedir(), ".codex");
@@ -241,7 +242,7 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
     id: glasslineSessionId(sessionUuid),
     providerId: "codex",
     providerName: "Codex",
-    title: indexEntry?.thread_name ?? firstUserMessage(timeline) ?? "Codex session",
+    title: codexSessionTitle(indexEntry?.thread_name, firstUserMessage(timeline)),
     projectPath: meta.cwd,
     status: "unknown",
     quality: "partial",
@@ -275,7 +276,7 @@ async function summarizeCodexSessionFile(filePath, { indexEntry } = {}) {
     id: glasslineSessionId(sessionUuid),
     providerId: "codex",
     providerName: "Codex",
-    title: indexEntry?.thread_name ?? "Codex session",
+    title: codexSessionTitle(indexEntry?.thread_name),
     projectPath: payload.cwd,
     status: "unknown",
     quality: "partial",
@@ -480,7 +481,7 @@ function staleIndexSession(indexEntry, filePath) {
     id: glasslineSessionId(indexEntry.id),
     providerId: "codex",
     providerName: "Codex",
-    title: indexEntry.thread_name ?? "Codex session",
+    title: codexSessionTitle(indexEntry.thread_name),
     status: "unknown",
     quality: "stale",
     lastUpdatedAt: indexEntry.updated_at ?? new Date().toISOString(),
@@ -564,6 +565,79 @@ function normalizeToolStatus(status) {
 
 function firstUserMessage(timeline) {
   return timeline.find((item) => item.type === "message" && item.role === "user")?.content;
+}
+
+function codexSessionTitle(indexTitle, firstUserText) {
+  const fallbackTitle = titleFromUserText(firstUserText);
+  const indexCandidate = cleanTitle(indexTitle);
+
+  if (indexCandidate && (indexCandidate.length <= SESSION_TITLE_MAX_LENGTH || !fallbackTitle)) {
+    return clampTitle(indexCandidate);
+  }
+
+  return fallbackTitle ?? "Codex session";
+}
+
+function titleFromUserText(text) {
+  const cleaned = cleanTitle(text);
+  if (!cleaned) {
+    return null;
+  }
+
+  const transcriptTitle = titleFromTranscript(text);
+  if (transcriptTitle) {
+    return clampTitle(transcriptTitle);
+  }
+
+  const firstLine = text
+    .split("\n")
+    .map((line) => cleanTitle(line))
+    .find((line) => line && !isTitleBoilerplate(line));
+
+  return clampTitle(firstLine ?? cleaned);
+}
+
+function titleFromTranscript(text) {
+  for (const line of text.split("\n")) {
+    const match = line.match(/^\[\d+\]\s+user:\s*(.+)$/);
+    if (match) {
+      const title = cleanTitle(match[1]);
+      if (title) {
+        return title;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isTitleBoilerplate(line) {
+  return (
+    line === ">>> TRANSCRIPT START" ||
+    line === ">>> TRANSCRIPT END" ||
+    line === "Output:" ||
+    line.startsWith("The following is the Codex agent history") ||
+    line.startsWith("Wall time:") ||
+    line.startsWith("Process exited with code ") ||
+    line.startsWith("Original token count:") ||
+    /^\[\d+\]\s+(assistant|tool|system|developer|agent|event|function)\b/.test(line)
+  );
+}
+
+function cleanTitle(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
+function clampTitle(title) {
+  if (title.length <= SESSION_TITLE_MAX_LENGTH) {
+    return title;
+  }
+
+  return `${title.slice(0, SESSION_TITLE_MAX_LENGTH - 3).trimEnd()}...`;
 }
 
 function latestText(timeline) {
