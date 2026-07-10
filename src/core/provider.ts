@@ -67,6 +67,17 @@ export interface Status extends BaseTimelineItem {
 
 export type TimelineItem = Message | CommandRun | ToolCall | FileChange | Status;
 
+export interface TimelinePageOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+export interface TimelinePage {
+  items: TimelineItem[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
 export interface Turn {
   id: string;
   role: "system" | "user" | "assistant" | "tool";
@@ -113,5 +124,6 @@ export interface ProviderAdapter {
   displayName: string;
   listSessions(): Promise<Session[]>;
   getSession?(id: string): Promise<Session | null>;
+  getSessionTimelinePage?(id: string, options?: TimelinePageOptions): Promise<TimelinePage | null>;
   getRawSession?(id: string): Promise<RawSession | null>;
 }

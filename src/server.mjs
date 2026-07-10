@@ -4,7 +4,12 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { collectSessions, getRawSession, getSession } from "./core/session-registry.mjs";
+import {
+  collectSessions,
+  getRawSession,
+  getSession,
+  getSessionTimelinePage
+} from "./core/session-registry.mjs";
 import { createClaudeCodeProvider } from "./providers/claude-code.mjs";
 import { createCodexProvider } from "./providers/codex.mjs";
 import { createMockProvider } from "./providers/mock.mjs";
@@ -42,6 +47,18 @@ const server = createServer(async (request, response) => {
 
     if (url.pathname === "/api/sessions") {
       sendJson(response, 200, { sessions: await collectSessions(providers) });
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/sessions/") && url.pathname.endsWith("/timeline")) {
+      const id = decodeURIComponent(
+        url.pathname.slice("/api/sessions/".length, -"/timeline".length)
+      );
+      const timeline = await getSessionTimelinePage(providers, id, {
+        limit: url.searchParams.get("limit"),
+        cursor: url.searchParams.get("cursor")
+      });
+      sendJson(response, timeline ? 200 : 404, timeline ? { timeline } : { error: "Timeline not found" });
       return;
     }
 

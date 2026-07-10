@@ -17,8 +17,8 @@
   - `npm test` -> `node --test`
 - `src/server.mjs` 负责静态文件和 JSON API；只接受 `GET`，其他 method 返回 `405`。
 - `src/server-listen.mjs` 负责 listen 和友好错误输出，例如 `EADDRINUSE`、`EPERM`。
-- `src/core/provider.ts` 定义核心模型：`ProviderAdapter`、`Session`、`Turn`、`TimelineItem`、`Message`、`CommandRun`、`ToolCall`、`FileChange`、`Status`、`SourceRef`、`ResumeRef`。
-- `src/core/session-registry.mjs` 负责 provider 聚合、normalize、按 `lastUpdatedAt` 降序排序、`resumeRef` normalize、raw fallback，以及 adapter error session。
+- `src/core/provider.ts` 定义核心模型：`ProviderAdapter`、`Session`、`Turn`、`TimelinePage`、`TimelineItem`、`Message`、`CommandRun`、`ToolCall`、`FileChange`、`Status`、`SourceRef`、`ResumeRef`。
+- `src/core/session-registry.mjs` 负责 provider 聚合、normalize、按 `lastUpdatedAt` 降序排序、`resumeRef` normalize、timeline page fallback、raw fallback，以及 adapter error session。
 - Provider adapters 在 `src/providers/`：
   - `mock.mjs`：UI/demo 数据，默认启用。
   - `codex.mjs`：Codex process discovery + session-file adapter 汇总。
@@ -52,6 +52,7 @@
   - `GET /api/providers`
   - `GET /api/sessions`
   - `GET /api/sessions/:id`
+  - `GET /api/sessions/:id/timeline?limit=80&cursor=<cursor>`：返回最新 timeline page；带 `cursor` 时返回更早一页。当前 cursor 是上一页窗口的起始 index 字符串。
   - `GET /api/raw/:id`
 
 ## Provider 当前行为
@@ -62,7 +63,7 @@
 - `codex`
   - 进程发现使用 `ps -axo pid=,lstart=,command=`，匹配 `codex` / `codex-cli`，排除 app helper、daemon、Crashpad、Codex Computer Use 等非用户 session 进程。
   - session-file 读取 `session_index.jsonl` 和 `sessions/**/*.jsonl`。
-  - 列表模式使用 lightweight summary；详情和 raw endpoint 按需读取完整 JSONL。
+  - 列表模式使用 lightweight summary；详情、timeline page 和 raw endpoint 按需读取完整 JSONL。
   - session title 要保持短标题：优先使用清理后的 `thread_name`；缺失或过长时，详情 parse 从第一条有意义的 user 请求提取标题；最终标题会截断到 96 字符，不能把完整 transcript/prompt blob 当 title。
   - `session-file` session id 形如 `codex:session-file:<uuid>`，质量通常是 `partial`。
   - `process-only` session id 形如 `codex:process:<pid>`，质量是 `process-only`。
@@ -79,7 +80,9 @@
 ## Frontend 当前行为
 
 - Session list 按后端 `lastUpdatedAt` 降序显示；自动刷新间隔是 8 秒。
-- 打开或切换 session 时，timeline 自动定位到最新 message；后台刷新不会强制滚动，避免打断阅读。
+- 打开或切换 session 时，先加载最新 timeline page（默认 80 items）并自动定位到最新 message；向上滚动到 timeline 顶部附近时才用 cursor 加载更早 page 并 prepend。
+- 后台刷新不会强制滚动；如果用户不在 timeline 末尾附近，当前已加载窗口会保留，避免打断阅读。
+- 如果后台刷新发现 selected session 有比当前已加载尾部更新的 `lastUpdatedAt`，会在 timeline 末尾显示 `New content` 控制；点击它或向下滚到当前已加载窗口底部附近时，会从最新 page 沿 `nextCursor` 向后追到与已加载窗口重叠，再按 item id 替换已刷新项并追加未加载项，避免跨页缺口。
 - 当前选中 session 刷新时会保留已经展开的 `activity_group` 和二级 details；切换 session 或浏览器重载后重置展开状态。
 - 主布局是独立滚动容器：
   - desktop：左侧 `.session-list` 自己滚动，右侧 `.timeline` / `.raw-view` 自己滚动。
@@ -107,11 +110,14 @@
   - malformed line 不应让整个 session 消失。
   - private file/index 缺失或滞后时要保守降级。
   - source/quality/resume metadata 不能丢。
+  - timeline page 的 `items`、`nextCursor`、`hasMore` 要稳定，不能破坏旧的完整 `GET /api/sessions/:id` 行为。
   - process matcher 要排除 app helper、daemon、crash handler。
 - 变更 frontend renderer/layout 时至少补对应 frontend tests：
   - markdown 必须保持安全 escape。
   - copy text 必须保持 raw source。
   - activity group 默认折叠。
+  - 初始 timeline 只加载最新 page；向上滚动才加载更早 page，且 prepend 后不能跳动阅读位置。
+  - 读历史时有新内容必须显示 `New content` 状态；点击或向下滚到底部附近能加载最新 page 并 append，不覆盖当前窗口。
   - mobile 独立滚动和 compact session card 不能回退。
 - 提交前运行：
   ```sh

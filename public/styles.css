@@ -313,6 +313,29 @@ h2 {
   overflow: hidden;
 }
 
+.timeline-pager {
+  flex: 0 0 1px;
+  min-height: 1px;
+}
+
+.timeline-newer {
+  align-self: center;
+  background: #e6f6ef;
+  border: 1px solid #b7e2cf;
+  border-radius: 8px;
+  color: var(--accent-ink);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.timeline-newer:hover {
+  background: #d7f0e4;
+}
+
 .timeline-block.is-activity-group {
   background: #fbfcfd;
 }
