@@ -258,6 +258,37 @@ test("codex provider list uses session-file summaries and detail resolves full t
   assert.equal(detail.timeline.length > 0, true);
 });
 
+test("codex provider returns timeline pages from the newest items backward", async () => {
+  const provider = createCodexProvider({
+    codexHome: fixtureRoot,
+    listAgentProcesses: async () => []
+  });
+
+  const latest = await provider.getSessionTimelinePage(
+    "codex:session-file:11111111-1111-4111-8111-111111111111",
+    { limit: 2 }
+  );
+
+  assert.deepEqual(
+    latest.items.map((item) => item.type),
+    ["tool_call", "file_change"]
+  );
+  assert.equal(latest.hasMore, true);
+  assert.equal(latest.nextCursor, "3");
+
+  const older = await provider.getSessionTimelinePage(
+    "codex:session-file:11111111-1111-4111-8111-111111111111",
+    { limit: 2, cursor: latest.nextCursor }
+  );
+
+  assert.deepEqual(
+    older.items.map((item) => item.type),
+    ["message", "command"]
+  );
+  assert.equal(older.hasMore, true);
+  assert.equal(older.nextCursor, "1");
+});
+
 test("extractCodexSessionReference reads session ids and resume paths", () => {
   assert.equal(
     extractCodexSessionReference("codex resume 11111111-1111-4111-8111-111111111111"),

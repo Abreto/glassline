@@ -2,6 +2,7 @@ import { open, readFile, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { pageTimelineItems } from "../core/session-registry.mjs";
 import { commandTokens } from "./process-utils.mjs";
 
 const CODEX_SESSION_PREFIX = "codex:session-file:";
@@ -112,6 +113,33 @@ export async function getCodexSessionFileSession(id, { codexHome = resolveCodexH
     return await parseCodexSessionFile(filePath, { indexEntry });
   } catch {
     return indexEntry ? staleIndexSession(indexEntry, filePath) : null;
+  }
+}
+
+export async function getCodexSessionFileTimelinePage(
+  id,
+  { codexHome = resolveCodexHome(), limit, cursor } = {}
+) {
+  const sessionUuid = sessionFileUuidFromGlasslineId(id);
+  if (!sessionUuid) {
+    return null;
+  }
+
+  const indexEntries = await readSessionIndex(codexHome);
+  const indexEntry = indexEntries.find((entry) => entry.id === sessionUuid);
+  const filePath = await findSessionFileById(codexHome, sessionUuid);
+
+  if (!filePath) {
+    return indexEntry ? pageTimelineItems(staleIndexSession(indexEntry).timeline, { limit, cursor }) : null;
+  }
+
+  try {
+    const session = await parseCodexSessionFile(filePath, { indexEntry });
+    return pageTimelineItems(session.timeline, { limit, cursor });
+  } catch {
+    return indexEntry
+      ? pageTimelineItems(staleIndexSession(indexEntry, filePath).timeline, { limit, cursor })
+      : null;
   }
 }
 

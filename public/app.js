@@ -18,12 +18,23 @@ import {
 } from "./session-renderers.js";
 import { renderErrorState, requestJson } from "./api-client.js";
 
+const TIMELINE_PAGE_LIMIT = 80;
+const TIMELINE_PRELOAD_PX = 96;
+
 const state = {
   sessions: [],
   selectedId: null,
   renderedTimelineSessionId: null,
+  timelineItems: [],
+  timelineNextCursor: null,
+  timelineHasMore: false,
+  timelineLoadingOlder: false,
+  timelineHasNewer: false,
+  timelineLoadingNewer: false,
   view: "timeline",
-  copyText: new Map()
+  copyText: new Map(),
+  copyTextIdsByScope: new Map(),
+  nextCopyTextId: 1
 };
 
 const listEl = document.querySelector("#session-list");
@@ -35,11 +46,18 @@ const refreshButton = document.querySelector("#refresh-button");
 const tabs = [...document.querySelectorAll(".tab")];
 
 refreshButton.addEventListener("click", () => loadSessions({ preserveSelection: true }));
+timelineEl.addEventListener("scroll", () => handleTimelineScroll());
 
 document.body.addEventListener("click", async (event) => {
   const sessionButton = event.target.closest("[data-session-id]");
   if (sessionButton) {
     await selectSession(sessionButton.dataset.sessionId);
+    return;
+  }
+
+  const newerButton = event.target.closest("[data-load-newer]");
+  if (newerButton) {
+    await loadNewerTimeline();
     return;
   }
 
@@ -55,6 +73,8 @@ tabs.forEach((tab) => {
     renderTabs();
     if (state.view === "raw") {
       await renderRaw();
+    } else if (state.renderedTimelineSessionId !== state.selectedId) {
+      await renderSelectedSession({ focusLatestMessage: true, reloadTimeline: true });
     } else {
       focusLatestTimelineMessage();
     }
@@ -67,6 +87,7 @@ window.setInterval(() => loadSessions({ preserveSelection: true }), 8000);
 async function loadSessions({ preserveSelection }) {
   countEl.textContent = "Refreshing";
   let payload;
+  const previousSelectedId = state.selectedId;
 
   try {
     payload = await requestJson("/api/sessions", { label: "Unable to load sessions" });
@@ -74,6 +95,7 @@ async function loadSessions({ preserveSelection }) {
     state.sessions = [];
     state.selectedId = null;
     state.renderedTimelineSessionId = null;
+    resetTimelineState();
     listEl.innerHTML = "";
     countEl.textContent = "Refresh failed";
     detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>Unable to load sessions</h2></div>';
@@ -92,7 +114,15 @@ async function loadSessions({ preserveSelection }) {
   }
 
   renderList();
-  await renderSelectedSession({ focusLatestMessage: shouldFocusLatestTimeline({ preserveSelection }) });
+  const selectionChanged =
+    state.selectedId !== previousSelectedId || state.renderedTimelineSessionId !== state.selectedId;
+  const reloadTimeline = selectionChanged || shouldRefreshTimeline({ preserveSelection });
+  const renderExistingTimeline = !reloadTimeline && markNewerTimelineIfNeeded({ preserveSelection });
+  await renderSelectedSession({
+    focusLatestMessage: shouldFocusLatestTimeline({ preserveSelection }),
+    reloadTimeline,
+    renderExistingTimeline
+  });
 }
 
 async function selectSession(id) {
@@ -100,13 +130,17 @@ async function selectSession(id) {
   state.view = "timeline";
   renderList();
   renderTabs();
-  await renderSelectedSession({ focusLatestMessage: true });
+  await renderSelectedSession({ focusLatestMessage: true, reloadTimeline: true });
 }
 
-async function renderSelectedSession({ focusLatestMessage = false } = {}) {
-  state.copyText.clear();
-
+async function renderSelectedSession({
+  focusLatestMessage = false,
+  reloadTimeline = true,
+  renderExistingTimeline = false
+} = {}) {
   if (!state.selectedId) {
+    clearCopyText();
+    resetTimelineState();
     state.renderedTimelineSessionId = null;
     detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>No sessions</h2></div>';
     timelineEl.innerHTML = '<p class="empty-state">No provider data available.</p>';
@@ -114,35 +148,32 @@ async function renderSelectedSession({ focusLatestMessage = false } = {}) {
     return;
   }
 
-  let payload;
-
-  try {
-    payload = await requestJson(`/api/sessions/${encodeURIComponent(state.selectedId)}`, {
-      label: "Unable to load session"
-    });
-  } catch (error) {
-    detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>Unable to load session</h2></div>';
-    timelineEl.innerHTML = renderErrorState(
-      "Unable to load session",
-      detailForError(error, "Unable to load session")
-    );
-    return;
-  }
-
-  const session = payload.session;
+  const session = selectedSession();
   if (!session) {
+    resetTimelineState();
     state.renderedTimelineSessionId = null;
     timelineEl.innerHTML = renderErrorState("Session disappeared", "The selected session is no longer available.");
     return;
   }
 
+  if (reloadTimeline) {
+    clearCopyText();
+  }
+
   renderDetailHeader(session);
-  renderTimeline(session);
 
   if (state.view === "raw") {
     await renderRaw();
   } else if (focusLatestMessage) {
-    focusLatestTimelineMessage();
+    if (reloadTimeline) {
+      await loadInitialTimeline({ focusLatestMessage });
+    } else {
+      focusLatestTimelineMessage();
+    }
+  } else if (reloadTimeline) {
+    await loadInitialTimeline();
+  } else if (renderExistingTimeline && state.renderedTimelineSessionId === state.selectedId) {
+    renderTimeline(state.selectedId);
   }
 }
 
@@ -175,7 +206,8 @@ function renderSessionRow(session) {
 }
 
 function renderDetailHeader(session) {
-  const resumeCopyId = session.resumeRef ? registerCopyText(textForResumeRef(session)) : null;
+  clearCopyTextScope("header");
+  const resumeCopyId = session.resumeRef ? registerCopyText(textForResumeRef(session), "header") : null;
 
   detailHeaderEl.innerHTML = `
     <div class="detail-heading">
@@ -192,21 +224,23 @@ function renderDetailHeader(session) {
   `;
 }
 
-function renderTimeline(session) {
-  const shouldRestoreDisclosures = state.renderedTimelineSessionId === session.id;
-  const openDisclosureIds = shouldRestoreDisclosures ? captureOpenDisclosureIds(timelineEl) : new Set();
-  timelineEl.innerHTML = session.timeline.length
-    ? groupTimelineItems(session.timeline).map(renderTimelineItem).join("")
+function renderTimeline(sessionId, { openDisclosureIds } = {}) {
+  clearCopyTextScope("timeline");
+  const shouldRestoreDisclosures = openDisclosureIds || state.renderedTimelineSessionId === sessionId;
+  const disclosuresToRestore = openDisclosureIds ?? (shouldRestoreDisclosures ? captureOpenDisclosureIds(timelineEl) : new Set());
+  const timelineHtml = state.timelineItems.length
+    ? groupTimelineItems(state.timelineItems).map(renderTimelineItem).join("")
     : '<p class="empty-state">No timeline items from current sources.</p>';
+  timelineEl.innerHTML = `${renderTimelinePager()}${timelineHtml}${renderNewContentControl()}`;
   if (shouldRestoreDisclosures) {
-    restoreOpenDisclosureIds(timelineEl, openDisclosureIds);
+    restoreOpenDisclosureIds(timelineEl, disclosuresToRestore);
   }
-  state.renderedTimelineSessionId = session.id;
+  state.renderedTimelineSessionId = sessionId;
 }
 
 function renderTimelineItem(item) {
   const text = item.type === "activity_group" ? textForActivityGroup(item) : textForTimelineItem(item);
-  const copyId = registerCopyText(text);
+  const copyId = registerCopyText(text, "timeline");
 
   return `
     <article
@@ -229,6 +263,7 @@ function renderTimelineItem(item) {
 }
 
 async function renderRaw() {
+  clearCopyTextScope("raw");
   if (!state.selectedId) {
     rawEl.innerHTML = renderErrorState("Raw data unavailable", "No session is selected.");
     return;
@@ -254,7 +289,7 @@ async function renderRaw() {
     return;
   }
 
-  const copyId = registerCopyText(payload.raw.text);
+  const copyId = registerCopyText(payload.raw.text, "raw");
   rawEl.innerHTML = `
     <div class="timeline-block">
       <header class="block-header">
@@ -304,6 +339,303 @@ function textForActivityGroup(group) {
   return group.items.map(textForTimelineItem).filter(Boolean).join("\n\n---\n\n");
 }
 
+async function loadInitialTimeline({ focusLatestMessage = false } = {}) {
+  const sessionId = state.selectedId;
+  if (!sessionId) {
+    return;
+  }
+
+  const openDisclosureIds =
+    state.renderedTimelineSessionId === sessionId ? captureOpenDisclosureIds(timelineEl) : undefined;
+  const preserveScrollPosition = !focusLatestMessage && state.renderedTimelineSessionId === sessionId;
+  const previousScrollTop = timelineEl.scrollTop ?? 0;
+
+  if (!preserveScrollPosition) {
+    resetTimelineState();
+    timelineEl.innerHTML = '<p class="empty-state">Loading timeline.</p>';
+  }
+
+  let payload;
+  try {
+    payload = await requestJson(timelinePageUrl(sessionId), {
+      label: "Unable to load timeline"
+    });
+  } catch (error) {
+    if (state.selectedId === sessionId) {
+      timelineEl.innerHTML = renderErrorState(
+        "Unable to load timeline",
+        detailForError(error, "Unable to load timeline")
+      );
+    }
+    return;
+  }
+
+  if (state.selectedId !== sessionId) {
+    return;
+  }
+
+  if (preserveScrollPosition) {
+    resetTimelineState();
+  }
+  applyTimelinePage(payload.timeline, { reset: true });
+  renderTimeline(sessionId, { openDisclosureIds });
+
+  if (focusLatestMessage) {
+    focusLatestTimelineMessage();
+  } else if (preserveScrollPosition) {
+    timelineEl.scrollTop = previousScrollTop;
+  }
+}
+
+async function handleTimelineScroll() {
+  await loadOlderTimelineIfNeeded();
+  await loadNewerTimelineIfNeeded();
+}
+
+async function loadOlderTimelineIfNeeded() {
+  if (
+    state.view !== "timeline" ||
+    state.timelineLoadingOlder ||
+    !state.timelineHasMore ||
+    !state.timelineNextCursor ||
+    (timelineEl.scrollTop ?? 0) > TIMELINE_PRELOAD_PX
+  ) {
+    return;
+  }
+
+  await loadOlderTimeline();
+}
+
+async function loadOlderTimeline() {
+  const sessionId = state.selectedId;
+  const cursor = state.timelineNextCursor;
+  if (!sessionId || !cursor) {
+    return;
+  }
+
+  state.timelineLoadingOlder = true;
+  const openDisclosureIds = captureOpenDisclosureIds(timelineEl);
+  const previousScrollHeight = timelineEl.scrollHeight ?? 0;
+  const previousScrollTop = timelineEl.scrollTop ?? 0;
+
+  try {
+    const payload = await requestJson(timelinePageUrl(sessionId, cursor), {
+      label: "Unable to load timeline"
+    });
+
+    if (state.selectedId !== sessionId) {
+      return;
+    }
+
+    applyTimelinePage(payload.timeline, { reset: false });
+    renderTimeline(sessionId, { openDisclosureIds });
+
+    const nextScrollHeight = timelineEl.scrollHeight ?? previousScrollHeight;
+    timelineEl.scrollTop = previousScrollTop + Math.max(0, nextScrollHeight - previousScrollHeight);
+  } catch {
+    if (state.selectedId === sessionId) {
+      state.timelineHasMore = false;
+      state.timelineNextCursor = null;
+      renderTimeline(sessionId, { openDisclosureIds });
+    }
+  } finally {
+    state.timelineLoadingOlder = false;
+  }
+}
+
+async function loadNewerTimelineIfNeeded() {
+  if (
+    state.view !== "timeline" ||
+    state.timelineLoadingNewer ||
+    !state.timelineHasNewer ||
+    !isNearTimelineEnd()
+  ) {
+    return;
+  }
+
+  await loadNewerTimeline();
+}
+
+function applyTimelinePage(page, { reset }) {
+  const items = Array.isArray(page?.items) ? page.items : [];
+  state.timelineItems = reset ? items : mergeOlderTimelineItems(items, state.timelineItems);
+  state.timelineNextCursor = page?.nextCursor ?? null;
+  state.timelineHasMore = Boolean(page?.hasMore && state.timelineNextCursor);
+  if (reset) {
+    state.timelineHasNewer = false;
+    state.timelineLoadingNewer = false;
+  }
+}
+
+function mergeOlderTimelineItems(olderItems, currentItems) {
+  const currentIds = new Set(currentItems.map((item) => item.id));
+  return [...olderItems.filter((item) => !currentIds.has(item.id)), ...currentItems];
+}
+
+async function loadNewerTimeline() {
+  const sessionId = state.selectedId;
+  if (!sessionId || !state.timelineHasNewer || state.timelineLoadingNewer) {
+    return;
+  }
+
+  state.timelineLoadingNewer = true;
+  const openDisclosureIds = captureOpenDisclosureIds(timelineEl);
+
+  try {
+    const items = await fetchNewerTimelineItems(sessionId);
+
+    if (state.selectedId !== sessionId || !items) {
+      return;
+    }
+
+    applyNewerTimelineItems(items);
+    renderTimeline(sessionId, { openDisclosureIds });
+    focusLatestTimelineMessage();
+  } catch {
+    if (state.selectedId === sessionId) {
+      state.timelineLoadingNewer = false;
+      renderTimeline(sessionId, { openDisclosureIds });
+    }
+  } finally {
+    state.timelineLoadingNewer = false;
+  }
+}
+
+async function fetchNewerTimelineItems(sessionId) {
+  const loadedIds = new Set(state.timelineItems.map((item) => item.id));
+  const seenCursors = new Set();
+  let cursor;
+  let items = [];
+
+  while (true) {
+    const payload = await requestJson(timelinePageUrl(sessionId, cursor), {
+      label: "Unable to load timeline"
+    });
+
+    if (state.selectedId !== sessionId) {
+      return null;
+    }
+
+    const page = payload.timeline;
+    const pageItems = Array.isArray(page?.items) ? page.items : [];
+    items = [...pageItems, ...items];
+
+    if (pageItems.some((item) => loadedIds.has(item.id))) {
+      return items;
+    }
+
+    const nextCursor = page?.hasMore ? page.nextCursor : null;
+    if (!nextCursor || seenCursors.has(String(nextCursor))) {
+      return null;
+    }
+
+    cursor = String(nextCursor);
+    seenCursors.add(cursor);
+  }
+}
+
+function applyNewerTimelineItems(items) {
+  state.timelineItems = mergeNewerTimelineItems(state.timelineItems, items);
+  state.timelineHasNewer = false;
+}
+
+function mergeNewerTimelineItems(currentItems, newerItems) {
+  const currentIds = new Set(currentItems.map((item) => item.id));
+  const newerById = new Map(newerItems.map((item) => [item.id, item]));
+  return [
+    ...currentItems.map((item) => newerById.get(item.id) ?? item),
+    ...newerItems.filter((item) => !currentIds.has(item.id))
+  ];
+}
+
+function renderTimelinePager() {
+  return state.timelineHasMore ? '<div class="timeline-pager" aria-hidden="true"></div>' : "";
+}
+
+function renderNewContentControl() {
+  if (!state.timelineHasNewer) {
+    return "";
+  }
+
+  const label = state.timelineLoadingNewer ? "Loading new content" : "New content";
+  return `<button class="timeline-newer" type="button" data-load-newer="true">${label}</button>`;
+}
+
+function resetTimelineState() {
+  state.timelineItems = [];
+  state.timelineNextCursor = null;
+  state.timelineHasMore = false;
+  state.timelineLoadingOlder = false;
+  state.timelineHasNewer = false;
+  state.timelineLoadingNewer = false;
+  state.renderedTimelineSessionId = null;
+}
+
+function selectedSession() {
+  return state.sessions.find((session) => session.id === state.selectedId) ?? null;
+}
+
+function shouldRefreshTimeline({ preserveSelection }) {
+  if (!preserveSelection) {
+    return true;
+  }
+
+  if (state.view === "raw") {
+    return false;
+  }
+
+  if (state.timelineItems.length === 0 || state.renderedTimelineSessionId !== state.selectedId) {
+    return true;
+  }
+
+  return isNearTimelineEnd();
+}
+
+function markNewerTimelineIfNeeded({ preserveSelection }) {
+  if (
+    !preserveSelection ||
+    state.view !== "timeline" ||
+    state.renderedTimelineSessionId !== state.selectedId ||
+    state.timelineItems.length === 0 ||
+    isNearTimelineEnd()
+  ) {
+    return false;
+  }
+
+  if (state.timelineHasNewer) {
+    return true;
+  }
+
+  const session = selectedSession();
+  const latestLoadedItem = state.timelineItems.at(-1);
+  if (isAfterTimestamp(session?.lastUpdatedAt, latestLoadedItem?.createdAt)) {
+    state.timelineHasNewer = true;
+    return true;
+  }
+
+  return false;
+}
+
+function isNearTimelineEnd() {
+  const maxScrollTop = Math.max(0, (timelineEl.scrollHeight ?? 0) - (timelineEl.clientHeight ?? 0));
+  return maxScrollTop - (timelineEl.scrollTop ?? 0) < 120;
+}
+
+function isAfterTimestamp(left, right) {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs > rightMs;
+}
+
+function timelinePageUrl(sessionId, cursor) {
+  const params = new URLSearchParams({ limit: String(TIMELINE_PAGE_LIMIT) });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  return `/api/sessions/${encodeURIComponent(sessionId)}/timeline?${params}`;
+}
+
 function focusLatestTimelineMessage() {
   window.requestAnimationFrame(() => {
     const target = findLatestTimelineFocusBlock(timelineEl.querySelectorAll("[data-timeline-type]"));
@@ -311,10 +643,27 @@ function focusLatestTimelineMessage() {
   });
 }
 
-function registerCopyText(text) {
-  const id = `copy-${state.copyText.size + 1}`;
+function registerCopyText(text, scope) {
+  const id = `copy-${state.nextCopyTextId}`;
+  state.nextCopyTextId += 1;
   state.copyText.set(id, text ?? "");
+  const scopeIds = state.copyTextIdsByScope.get(scope) ?? new Set();
+  scopeIds.add(id);
+  state.copyTextIdsByScope.set(scope, scopeIds);
   return id;
+}
+
+function clearCopyTextScope(scope) {
+  for (const id of state.copyTextIdsByScope.get(scope) ?? []) {
+    state.copyText.delete(id);
+  }
+  state.copyTextIdsByScope.delete(scope);
+}
+
+function clearCopyText() {
+  state.copyText.clear();
+  state.copyTextIdsByScope.clear();
+  state.nextCopyTextId = 1;
 }
 
 async function copyRegisteredText(id) {

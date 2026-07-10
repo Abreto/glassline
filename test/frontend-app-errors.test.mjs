@@ -14,7 +14,7 @@ test("app renders a recoverable sessions load error", async () => {
   assert.equal(typeof dom.refresh.listeners.click, "function");
 });
 
-test("app renders a readable session detail load error", async () => {
+test("app renders a readable timeline page load error", async () => {
   const dom = installFakeDom();
   globalThis.fetch = async (url) => {
     if (url === "/api/sessions") {
@@ -23,13 +23,17 @@ test("app renders a readable session detail load error", async () => {
       });
     }
 
-    throw new Error("detail down");
+    if (String(url).startsWith("/api/sessions/codex%3Aone/timeline")) {
+      throw new Error("timeline down");
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
   };
 
-  await importApp("detail-error");
+  await importApp("timeline-error");
 
-  assert.match(dom.timeline.innerHTML, /Unable to load session/);
-  assert.match(dom.timeline.innerHTML, /detail down/);
+  assert.match(dom.timeline.innerHTML, /Unable to load timeline/);
+  assert.match(dom.timeline.innerHTML, /timeline down/);
 });
 
 test("app renders a readable raw data load error", async () => {
@@ -41,16 +45,17 @@ test("app renders a readable raw data load error", async () => {
       });
     }
 
-    if (String(url).startsWith("/api/sessions/")) {
+    if (String(url).startsWith("/api/sessions/codex%3Aone/timeline")) {
       return jsonResponse({
-        session: {
-          ...sessionSummary(),
-          timeline: []
-        }
+        timeline: { items: [], hasMore: false }
       });
     }
 
-    throw new Error("raw down");
+    if (String(url).startsWith("/api/raw/")) {
+      throw new Error("raw down");
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
   };
 
   await importApp("raw-error");

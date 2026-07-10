@@ -1,8 +1,10 @@
+import { pageTimelineItems } from "../core/session-registry.mjs";
 import { listAgentProcesses, processSession } from "./process-utils.mjs";
 import {
   codexResumeRef,
   extractCodexSessionReference,
   getCodexSessionFileSession,
+  getCodexSessionFileTimelinePage,
   getRawCodexSessionFile,
   isCodexSessionFileSessionId,
   listCodexSessionFileSessions,
@@ -81,6 +83,15 @@ export function createCodexProvider(options = {}) {
 
       const sessions = await this.listSessions();
       return sessions.find((session) => session.id === id) ?? null;
+    },
+
+    async getSessionTimelinePage(id, options = {}) {
+      if (isCodexSessionFileSessionId(id)) {
+        return getCodexSessionFileTimelinePage(id, { ...options, codexHome });
+      }
+
+      const session = await this.getSession(id);
+      return session ? pageTimelineItems(session.timeline, options) : null;
     },
 
     async getRawSession(id) {

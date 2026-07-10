@@ -34,6 +34,27 @@ export async function getSession(providers, id) {
   return null;
 }
 
+export async function getSessionTimelinePage(providers, id, options = {}) {
+  const pageOptions = normalizeTimelinePageOptions(options);
+
+  for (const provider of providersForSession(providers, id)) {
+    if (typeof provider.getSessionTimelinePage === "function") {
+      const page = await provider.getSessionTimelinePage(id, pageOptions);
+      if (page) {
+        return normalizeTimelinePage(page);
+      }
+    }
+
+    const session = await providerSession(provider, id);
+    if (session) {
+      const normalized = normalizeSession(provider, session);
+      return pageTimelineItems(normalized.timeline, pageOptions);
+    }
+  }
+
+  return null;
+}
+
 export async function getRawSession(providers, id) {
   for (const provider of providersForSession(providers, id)) {
     if (typeof provider.getRawSession !== "function") {
@@ -63,6 +84,18 @@ export async function getRawSession(providers, id) {
 function providersForSession(providers, id) {
   const owner = providers.find((provider) => id.startsWith(`${provider.id}:`));
   return owner ? [owner] : providers;
+}
+
+async function providerSession(provider, id) {
+  if (typeof provider.getSession === "function") {
+    const session = await provider.getSession(id);
+    if (session) {
+      return session;
+    }
+  }
+
+  const sessions = await provider.listSessions();
+  return sessions.find((candidate) => candidate.id === id) ?? null;
 }
 
 function normalizeSession(provider, session) {
@@ -123,6 +156,56 @@ function normalizeTimeline(timeline, sessionSources) {
           : sessionSources
     };
   });
+}
+
+function normalizeTimelinePage(page) {
+  return {
+    items: normalizeTimeline(page.items, []),
+    ...(page.nextCursor ? { nextCursor: String(page.nextCursor) } : {}),
+    hasMore: Boolean(page.hasMore)
+  };
+}
+
+export function pageTimelineItems(items, options = {}) {
+  const timeline = Array.isArray(items) ? items : [];
+  const limit = normalizeTimelinePageOptions(options).limit;
+  const end = normalizeTimelineCursor(options.cursor, timeline.length);
+  const start = Math.max(0, end - limit);
+
+  return {
+    items: timeline.slice(start, end),
+    ...(start > 0 ? { nextCursor: String(start) } : {}),
+    hasMore: start > 0
+  };
+}
+
+function normalizeTimelinePageOptions(options = {}) {
+  return {
+    limit: normalizeTimelineLimit(options.limit),
+    cursor: options.cursor === undefined || options.cursor === null ? undefined : String(options.cursor)
+  };
+}
+
+function normalizeTimelineLimit(value) {
+  const limit = Number(value);
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return 80;
+  }
+
+  return Math.min(200, Math.floor(limit));
+}
+
+function normalizeTimelineCursor(cursor, itemCount) {
+  if (cursor === undefined || cursor === null || cursor === "") {
+    return itemCount;
+  }
+
+  const value = Number(cursor);
+  if (!Number.isFinite(value)) {
+    return itemCount;
+  }
+
+  return Math.max(0, Math.min(itemCount, Math.floor(value)));
 }
 
 function normalizeTurns(turns, sessionSources) {
