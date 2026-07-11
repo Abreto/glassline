@@ -13,7 +13,7 @@ export function createMockProvider() {
     providerId: "mock",
     providerName: "Mock",
     title: "Glassline MVP sample",
-    projectPath: "/Users/abreto/workspace/glassline",
+    projectPath: "/repo/glassline",
     status: "running",
     quality: "complete",
     startedAt,
@@ -34,7 +34,7 @@ export function createMockProvider() {
         type: "command",
         createdAt: "2026-07-05T09:01:00.000Z",
         command: "npm test",
-        cwd: "/Users/abreto/workspace/glassline",
+        cwd: "/repo/glassline",
         exitCode: 0,
         output: "TAP version 13\n# pass 3\n# fail 0",
         sourceRefs: [sourceRef]

@@ -7,15 +7,21 @@
 - Glassline 是一个只读的本地 AI agent session viewer，用于在浏览器里查看本机 agent session、transcript、命令输出、文件改动和 raw source data。
 - 不要在没有明确产品决策的情况下加入 prompt submission、approve/deny、kill process、命令输入、交互式 web shell、WebSocket terminal 或任何会触碰执行链路的行为。
 - 当前默认服务面向本机使用：`HOST` 默认是 `127.0.0.1`。如果为了手机测试改成 `HOST=0.0.0.0`，需要明确这是局域网暴露，不等于产品默认安全模型。
+- HTTP Host 默认只允许 `localhost`、`127.0.0.1` 和 `::1`；反向代理或局域网访问必须用 `GLASSLINE_ALLOWED_HOSTS` 显式追加精确 hostname/IP。该白名单不提供鉴权，非 loopback 访问仍必须有外部认证。
 - Provider 私有文件只允许作为 best-effort 数据源，不能当作稳定 API。解析失败、缺字段、索引滞后都要保守处理。
 - 所有 session/timeline 数据都要尽量携带 `SourceRef`，并用 `quality` 明确数据质量：`complete`、`partial`、`process-only`、`stale`。
 
 ## 当前架构
 
-- Runtime 是 Node.js 内置 HTTP server，无运行时 npm dependencies。`package.json` 只有：
+- Runtime 是 Node.js 内置 HTTP server，无运行时 npm dependencies。`package.json` 的 scripts 包括：
   - `npm start` -> `node src/server.mjs`
   - `npm test` -> `node --test`
-- `src/server.mjs` 负责静态文件和 JSON API；只接受 `GET`，其他 method 返回 `405`。
+  - `npm run install-launchd` / `npm run uninstall-launchd` -> 安装或卸载 macOS user LaunchAgent。
+  - `npm run check:sensitive-history` -> 扫描所有 reachable Git blob 的常见凭据和本机路径，并应用精确 baseline。
+  - `npm run release-check` -> 顺序运行测试和历史敏感信息扫描。
+- `src/server.mjs` 负责环境配置、provider 装配和启动 HTTP server。
+- `src/http-app.mjs` 负责静态文件和 JSON API handler；只接受 `GET`，其他 method 返回 `405`，并确保所有响应包含统一安全头。
+- `src/http-security.mjs` 负责 `GLASSLINE_ALLOWED_HOSTS` 解析、HTTP Host 校验和浏览器安全响应头。
 - `src/server-listen.mjs` 负责 listen 和友好错误输出，例如 `EADDRINUSE`、`EPERM`。
 - `src/core/provider.ts` 定义核心模型：`ProviderAdapter`、`Session`、`Turn`、`TimelinePage`、`TimelineItem`、`Message`、`CommandRun`、`ToolCall`、`FileChange`、`Status`、`SourceRef`、`ResumeRef`。
 - `src/core/session-registry.mjs` 负责 provider 聚合、normalize、按 `lastUpdatedAt` 降序排序、`resumeRef` normalize、timeline page fallback、raw fallback，以及 adapter error session。
@@ -42,6 +48,7 @@
 - 常用环境变量：
   - `PORT`：HTTP port，默认 `6280`。
   - `HOST`：bind host，默认 `127.0.0.1`。
+  - `GLASSLINE_ALLOWED_HOSTS`：逗号分隔的额外 HTTP Host hostname/IP；精确匹配、忽略请求 port，不允许 scheme、path、userinfo、port 或 wildcard。
   - `GLASSLINE_MOCK=0`：隐藏 mock provider。
   - `CODEX_HOME`：覆盖 Codex 数据目录，默认 `~/.codex`。
 - 内部 smoke 命令示例：
@@ -105,6 +112,8 @@
 - 手工编辑文件使用 `apply_patch`。
 - `AGENTS.md` 必须进 git；每次大型修改架构、Provider、HTTP API、核心模型、前端行为、运行参数或测试策略时，都要同步更新本文件，避免未来 agent 依据过期上下文工作。
 - 不要引入运行时依赖，除非有清楚理由并且同步更新测试和文档。
+- fixture 和 mock 只能使用合成数据与 example path，不能提交真实 transcript、provider log、token、私有仓库路径或用户 home path。
+- `.github/workflows/ci.yml` 在 macOS Node 20/22 和 Ubuntu Node 20 运行测试，并用完整 history 单独运行敏感信息扫描。
 - 保持 read-only 边界；任何写入、控制、shell、WebSocket、PTY、prompt/approve/kill 行为都需要先做明确产品决策。
 - 变更 provider/parser 时至少补 parser/provider 单测，尤其是：
   - malformed line 不应让整个 session 消失。
@@ -121,7 +130,7 @@
   - mobile 独立滚动和 compact session card 不能回退。
 - 提交前运行：
   ```sh
-  npm test
+  npm run release-check
   git status --short
   ```
 

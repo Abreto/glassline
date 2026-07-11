@@ -18,6 +18,23 @@ test("startListening logs the local URL when the server starts", () => {
   assert.deepEqual(messages, ["Glassline is running at http://127.0.0.1:6280"]);
 });
 
+test("startListening warns when binding beyond loopback", () => {
+  const server = fakeServer();
+  const warnings = [];
+
+  startListening(server, {
+    host: "0.0.0.0",
+    port: 6280,
+    log: () => {},
+    warn: (message) => warnings.push(message)
+  });
+  server.start();
+
+  assert.deepEqual(warnings, [
+    "Warning: Glassline is listening on non-loopback host 0.0.0.0. Session data may contain secrets; configure GLASSLINE_ALLOWED_HOSTS and protect access with external authentication."
+  ]);
+});
+
 test("startListening reports permission errors without a stack trace", () => {
   const server = fakeServer();
   const errors = [];

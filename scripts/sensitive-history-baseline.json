@@ -1,0 +1,14 @@
+[
+  {
+    "objectId": "3f9cb1c3fe712935bb5f24ba86aba6b269b74d87",
+    "path": "src/providers/mock.mjs",
+    "ruleId": "home-directory",
+    "fingerprint": "9e8a158eb018df7f0248b6687671d446e797a885b1c0aa04baec6b712053ba35"
+  },
+  {
+    "objectId": "8d417c93af578fa9a20bf5db4a9f59dbac750ba9",
+    "path": "test/frontend-session-renderers.test.mjs",
+    "ruleId": "home-directory",
+    "fingerprint": "9e8a158eb018df7f0248b6687671d446e797a885b1c0aa04baec6b712053ba35"
+  }
+]

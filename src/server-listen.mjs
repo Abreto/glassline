@@ -4,6 +4,7 @@ export function startListening(
     host,
     port,
     log = console.log,
+    warn = console.warn,
     error = console.error,
     exit = process.exit
   }
@@ -15,7 +16,21 @@ export function startListening(
 
   server.listen(port, host, () => {
     log(`Glassline is running at http://${host}:${port}`);
+    if (!isLoopbackHost(host)) {
+      warn(
+        `Warning: Glassline is listening on non-loopback host ${host}. Session data may contain secrets; configure GLASSLINE_ALLOWED_HOSTS and protect access with external authentication.`
+      );
+    }
   });
+}
+
+function isLoopbackHost(host) {
+  const normalized = String(host ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1")
+    .replace(/\.$/, "");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function formatListenError(error, host, port) {

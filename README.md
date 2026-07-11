@@ -1,16 +1,37 @@
 # Glassline
 
-Glassline is a read-only local AI agent session viewer. It gives a browser UI for watching local agent state, transcript fragments, command output, file-change summaries, and raw source data without sending prompts or controlling the running agent.
+Glassline is a read-only local AI agent session viewer. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data without sending prompts or controlling the running agent.
 
-## Run
+## Security and privacy
+
+Agent transcripts and raw provider records can contain source code, local paths, command output, access tokens, or other secrets. Glassline has no built-in authentication and is designed to bind to `127.0.0.1` by default.
+
+Do not expose Glassline directly to a LAN or the public internet. If you use a tunnel or reverse proxy, protect it with authentication such as Cloudflare Access and explicitly allow the proxy hostname with `GLASSLINE_ALLOWED_HOSTS`.
+
+`GLASSLINE_ALLOWED_HOSTS` only validates HTTP Host headers. It does not change the bind address, encrypt traffic, or add authentication.
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+## Requirements and platform support
+
+- Node.js 20 or newer.
+- macOS is the primary supported platform.
+- Linux is best-effort; the process adapters require a compatible `ps` implementation.
+- Windows is not currently supported.
+
+Glassline has no runtime npm dependencies.
+
+## Run from a checkout
+
+From the repository directory:
 
 ```sh
 npm start
 ```
 
-Then open `http://127.0.0.1:6280`.
+Open `http://127.0.0.1:6280`.
 
-The MVP has no runtime npm dependencies. It includes a mock provider so the UI has sample data immediately. Disable that sample data with:
+A synthetic mock session is enabled by default so the UI has sample data immediately. Hide it with:
 
 ```sh
 GLASSLINE_MOCK=0 npm start
@@ -20,20 +41,33 @@ Runtime options:
 
 - `PORT`: HTTP port, default `6280`.
 - `HOST`: bind host, default `127.0.0.1`.
+- `GLASSLINE_ALLOWED_HOSTS`: comma-separated additional hostnames or IP addresses accepted in HTTP Host headers. Entries are exact, omit ports, and do not support wildcards.
 - `GLASSLINE_MOCK=0`: hide sample provider data.
 - `CODEX_HOME`: override the Codex data directory, default `~/.codex`.
 
-## macOS Persistent Local Service
+Loopback hosts (`localhost`, `127.0.0.1`, and `::1`) are always accepted. A custom reverse-proxy hostname can be added without changing the default bind address:
 
-For self-hosted macOS use, Glassline can install a user-level `launchd` service:
+```sh
+GLASSLINE_ALLOWED_HOSTS=glassline.example.com npm start
+```
+
+Binding beyond loopback is an explicit trust-boundary change and prints a startup warning. LAN access also needs the address used by the browser in the Host allowlist:
+
+```sh
+HOST=0.0.0.0 GLASSLINE_ALLOWED_HOSTS=192.168.1.10 npm start
+```
+
+This example is not an authenticated deployment model.
+
+## macOS persistent local service
+
+Install a user-level `launchd` service from the current checkout:
 
 ```sh
 npm run install-launchd
 ```
 
-This is a user LaunchAgent and does not require `sudo`. If launchctl suggests re-running as root while installing Glassline, treat that as a bug and do not retry with `sudo`.
-
-The service label is `com.glassline.local`. It runs the current repo with the Node executable used by npm, keeps Glassline bound to `127.0.0.1:6280`, and starts with:
+The LaunchAgent does not require `sudo`. It runs the current repository with the Node executable used by npm and sets:
 
 - `HOST=127.0.0.1`
 - `PORT=6280`
@@ -45,61 +79,33 @@ Check service state:
 launchctl print gui/$UID/com.glassline.local
 ```
 
-Logs are retained at:
+Logs are retained at `~/Library/Logs/glassline/stdout.log` and `~/Library/Logs/glassline/stderr.log`.
 
-```text
-~/Library/Logs/glassline/stdout.log
-~/Library/Logs/glassline/stderr.log
-```
-
-Uninstall the local service:
+Uninstall the service with:
 
 ```sh
 npm run uninstall-launchd
 ```
 
-Uninstalling stops the launch agent and removes `~/Library/LaunchAgents/com.glassline.local.plist`. It keeps the log directory for troubleshooting.
+Uninstalling stops the LaunchAgent and removes its plist while retaining logs for troubleshooting. The scripts do not install or manage Cloudflare Tunnel.
 
-Cloudflare Tunnel and Cloudflare Access are configured separately. The launchd service only keeps the local Glassline process running; it does not install or manage `cloudflared`.
+## Provider behavior
 
-## Test
+- `mock`: a complete synthetic session for UI development.
+- `codex`: best-effort process discovery plus best-effort session-file parsing from `CODEX_HOME || ~/.codex`. Session-file entries are normally `partial`; unmatched live processes remain `process-only`.
+- `claude-code`: best-effort process discovery only; sessions are `process-only`.
 
-```sh
-npm test
-```
+Private provider files are not stable APIs. Missing, malformed, or stale data is handled conservatively and surfaced with `SourceRef` and explicit quality metadata.
 
-## Internal MVP Release Check
+Known limits:
 
-Before sharing an internal build:
+- Codex session-file status is usually `unknown` unless it can be matched to a running process.
+- Claude Code has no transcript parser yet.
+- There is no authentication, remote deployment model, prompt input, approve/deny action, process control, command execution, or web shell.
 
-1. Run `npm test`.
-2. Run `GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home npm start`.
-3. Check `http://127.0.0.1:6281/api/providers`, `/api/sessions`, and `/`.
-4. Confirm helper processes such as Codex Computer Use are not listed as sessions.
-5. Stop the local server after the smoke check.
+## Provider contract
 
-## Current Provider Behavior
-
-- `mock`: sample complete session for UI development.
-- `codex`: best-effort process discovery plus best-effort session-file parsing from `CODEX_HOME || ~/.codex`. Session-file entries are marked `partial`; process-only entries remain `process-only`.
-- `claude-code`: best-effort process discovery. Sessions are marked `process-only`.
-
-Private provider session files and logs are intentionally not treated as stable APIs. Future adapters should keep parser-specific uncertainty inside the provider layer and surface `SourceRef` entries with explicit confidence on sessions, turns, and timeline items.
-
-Codex session-file support reads `session_index.jsonl` and `sessions/**/*.jsonl`. List responses use lightweight summaries; detail and raw endpoints read the full JSONL on demand.
-
-Known MVP limits:
-
-- Provider data is read-only and best-effort; private provider files are not stable APIs.
-- Codex session-file status is usually `unknown` unless a matching running process is found.
-- Claude Code support is process-only in this MVP.
-- The app is intended for local use on `127.0.0.1`, not as a shared network service.
-
-## Provider Contract
-
-The TypeScript interface lives in `src/core/provider.ts`.
-
-At runtime, a provider adapter exposes:
+The TypeScript model lives in `src/core/provider.ts`. At runtime an adapter exposes:
 
 ```ts
 interface ProviderAdapter {
@@ -107,15 +113,58 @@ interface ProviderAdapter {
   displayName: string;
   listSessions(): Promise<Session[]>;
   getSession?(id: string): Promise<Session | null>;
+  getSessionTimelinePage?(
+    id: string,
+    options?: TimelinePageOptions
+  ): Promise<TimelinePage | null>;
   getRawSession?(id: string): Promise<RawSession | null>;
 }
 ```
 
-The core registry in `src/core/session-registry.mjs` normalizes provider output, sorts sessions by `lastUpdatedAt`, and falls back to JSON raw output when a provider does not expose raw source text.
+The core registry normalizes provider output, sorts sessions by `lastUpdatedAt`, paginates fallback timelines, and falls back to JSON when an adapter does not expose raw source text.
 
-## API
+## HTTP API
 
 - `GET /api/providers`
 - `GET /api/sessions`
 - `GET /api/sessions/:id`
+- `GET /api/sessions/:id/timeline?limit=80&cursor=<cursor>`
 - `GET /api/raw/:id`
+
+The timeline endpoint returns the newest page first. `nextCursor` requests an older page, and page limits are capped at 200 items.
+
+## Development and pre-public checks
+
+Run the test suite:
+
+```sh
+npm test
+```
+
+Scan every reachable Git blob for common secrets and non-placeholder home paths:
+
+```sh
+npm run check:sensitive-history
+```
+
+Run both checks in sequence:
+
+```sh
+npm run release-check
+```
+
+Before making a repository public:
+
+1. Fetch the complete Git history and run `npm run release-check`.
+2. Run `npm pack --dry-run --json` and inspect the file list.
+3. Start the fixture server with `GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home npm start`.
+4. Check `/`, `/api/providers`, `/api/sessions`, and a timeline page from an allowed Host.
+5. Confirm an unapproved Host receives `403` before provider discovery.
+6. Confirm helper processes such as Codex Computer Use are not listed as sessions.
+7. Enable GitHub Private Vulnerability Reporting before public access.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

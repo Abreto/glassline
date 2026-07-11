@@ -63,7 +63,7 @@ test("renderSessionCompactMeta shows only time and quality for mobile cards", ()
   const html = renderSessionCompactMeta(
     {
       quality: "partial",
-      projectPath: "/Users/abreto/Documents/Codex/project",
+      projectPath: "/Users/example/Documents/Codex/project",
       resumeRef: {
         value: "019f3218-b3f0-7fc1-b6d7-141432908607",
         command: "codex resume 019f3218-b3f0-7fc1-b6d7-141432908607",
