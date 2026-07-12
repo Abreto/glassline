@@ -1,144 +1,144 @@
 # Glassline Agent Handoff
 
-本文件是给未来 coding agents 的项目状态说明。它不是用户营销文档；优先帮助后续修改保持 Glassline 的产品边界、架构约束和测试习惯。
+This document records the current project state for future coding agents. It is not user-facing marketing documentation. Its primary purpose is to help future changes preserve Glassline's product boundaries, architectural constraints, and testing practices.
 
-## 产品边界
+## Product Boundaries
 
-- Glassline 是一个只读的本地 AI agent session viewer，用于在浏览器里查看本机 agent session、transcript、命令输出、文件改动和 raw source data。
-- 不要在没有明确产品决策的情况下加入 prompt submission、approve/deny、kill process、命令输入、交互式 web shell、WebSocket terminal 或任何会触碰执行链路的行为。
-- 当前默认服务面向本机使用：`HOST` 默认是 `127.0.0.1`。如果为了手机测试改成 `HOST=0.0.0.0`，需要明确这是局域网暴露，不等于产品默认安全模型。
-- HTTP Host 默认只允许 `localhost`、`127.0.0.1` 和 `::1`；反向代理或局域网访问必须用 `GLASSLINE_ALLOWED_HOSTS` 显式追加精确 hostname/IP。该白名单不提供鉴权，非 loopback 访问仍必须有外部认证。
-- Provider 私有文件只允许作为 best-effort 数据源，不能当作稳定 API。解析失败、缺字段、索引滞后都要保守处理。
-- 所有 session/timeline 数据都要尽量携带 `SourceRef`，并用 `quality` 明确数据质量：`complete`、`partial`、`process-only`、`stale`。
+- Glassline is a read-only local AI agent session viewer. It provides a browser interface for inspecting local agent sessions, transcripts, command output, file changes, and raw source data.
+- Do not add prompt submission, approve/deny actions, process termination, command input, an interactive web shell, a WebSocket terminal, or any other execution-path control without an explicit product decision.
+- The service is local by default: `HOST` defaults to `127.0.0.1`. Setting `HOST=0.0.0.0` for phone testing exposes Glassline to the local network and does not represent the product's default security model.
+- HTTP Host validation allows only `localhost`, `127.0.0.1`, and `::1` by default. Reverse-proxy or LAN access must explicitly add exact hostnames or IP addresses through `GLASSLINE_ALLOWED_HOSTS`. This allowlist is not authentication; non-loopback access still requires external authentication.
+- Treat private provider files as best-effort data sources, never as stable APIs. Handle parse failures, missing fields, and stale indexes conservatively.
+- Session and timeline data should carry `SourceRef` metadata wherever possible and must use `quality` to communicate data quality: `complete`, `partial`, `process-only`, or `stale`.
 
-## 当前架构
+## Current Architecture
 
-- Runtime 是 Node.js 内置 HTTP server，无运行时 npm dependencies。`package.json` 的 scripts 包括：
+- The runtime is a Node.js built-in HTTP server with no runtime npm dependencies. `package.json` includes these scripts:
   - `npm start` -> `node src/server.mjs`
   - `npm test` -> `node --test`
-  - `npm run install-launchd` / `npm run uninstall-launchd` -> 安装或卸载 macOS user LaunchAgent。
-  - `npm run check:sensitive-history` -> 扫描所有 reachable Git blob 的常见凭据和本机路径，并应用精确 baseline。
-  - `npm run release-check` -> 顺序运行测试和历史敏感信息扫描。
-- `src/server.mjs` 负责环境配置、provider 装配和启动 HTTP server。
-- `src/http-app.mjs` 负责静态文件和 JSON API handler；只接受 `GET`，其他 method 返回 `405`，并确保所有响应包含统一安全头。
-- `src/http-security.mjs` 负责 `GLASSLINE_ALLOWED_HOSTS` 解析、HTTP Host 校验和浏览器安全响应头。
-- `src/server-listen.mjs` 负责 listen 和友好错误输出，例如 `EADDRINUSE`、`EPERM`。
-- `src/core/provider.ts` 定义核心模型：`ProviderAdapter`、`Session`、`Turn`、`TimelinePage`、`TimelineItem`、`Message`、`CommandRun`、`ToolCall`、`FileChange`、`Status`、`SourceRef`、`ResumeRef`。
-- `src/core/session-registry.mjs` 负责 provider 聚合、normalize、按 `lastUpdatedAt` 降序排序、`resumeRef` normalize、timeline page fallback、raw fallback，以及 adapter error session。
-- Provider adapters 在 `src/providers/`：
-  - `mock.mjs`：UI/demo 数据，默认启用。
-  - `codex.mjs`：Codex process discovery + session-file adapter 汇总。
-  - `codex-session-file.mjs`：读取和解析 `CODEX_HOME || ~/.codex` 下的 Codex JSONL。
-  - `claude-code.mjs`：Claude Code process-only discovery。
-  - `process-utils.mjs`：`ps` 进程发现、命令 token 化、process-only session 构造。
-- Frontend 是 browser-native static modules，无 React/Vite/Tailwind：
-  - `public/app.js`：应用状态、API 调用、session selection、timeline/raw 渲染、copy registry。
-  - `public/api-client.js`：`requestJson()` 和 error state。
-  - `public/timeline-renderers.js`：timeline grouping、safe markdown、activity group、collapsed output。
-  - `public/session-renderers.js`：session/resume UI 小组件。
-  - `public/styles.css`：移动端优先、双滚动区域布局。
+  - `npm run install-launchd` / `npm run uninstall-launchd` -> install or remove the macOS user LaunchAgent.
+  - `npm run check:sensitive-history` -> scan all reachable Git blobs for common credentials and local paths, then apply the exact-match baseline.
+  - `npm run release-check` -> run the tests and sensitive-history scan sequentially.
+- `src/server.mjs` loads environment configuration, assembles providers, and starts the HTTP server.
+- `src/http-app.mjs` implements the static-file and JSON API request handler. It accepts only `GET`; other methods return `405`. It also applies the shared security headers to every response.
+- `src/http-security.mjs` parses `GLASSLINE_ALLOWED_HOSTS`, validates HTTP Host headers, and defines browser security headers.
+- `src/server-listen.mjs` handles server listening and friendly errors such as `EADDRINUSE` and `EPERM`.
+- `src/core/provider.ts` defines the core models: `ProviderAdapter`, `Session`, `Turn`, `TimelinePage`, `TimelineItem`, `Message`, `CommandRun`, `ToolCall`, `FileChange`, `Status`, `SourceRef`, and `ResumeRef`.
+- `src/core/session-registry.mjs` aggregates providers, normalizes data, sorts by descending `lastUpdatedAt`, normalizes `resumeRef`, provides timeline-page and raw-data fallbacks, and creates adapter-error sessions.
+- Provider adapters live in `src/providers/`:
+  - `mock.mjs`: UI and demo data; enabled by default.
+  - `codex.mjs`: combines Codex process discovery with the session-file adapter.
+  - `codex-session-file.mjs`: reads and parses Codex JSONL under `CODEX_HOME || ~/.codex`.
+  - `claude-code.mjs`: process-only Claude Code discovery.
+  - `process-utils.mjs`: `ps` process discovery, command tokenization, and process-only session construction.
+- The frontend uses browser-native static modules with no React, Vite, or Tailwind:
+  - `public/app.js`: application state, API requests, session selection, timeline/raw rendering, and the copy registry.
+  - `public/api-client.js`: `requestJson()` and error state.
+  - `public/timeline-renderers.js`: timeline grouping, safe Markdown, activity groups, and collapsed output.
+  - `public/session-renderers.js`: small session and resume UI components.
+  - `public/styles.css`: mobile-first styling and the dual-scroll-region layout.
 
-## 运行、环境变量和 API
+## Runtime, Environment Variables, and API
 
-- 本地启动：
+- Start locally with:
   ```sh
   npm start
   ```
-- 默认地址：`http://127.0.0.1:6280`
-- 常用环境变量：
-  - `PORT`：HTTP port，默认 `6280`。
-  - `HOST`：bind host，默认 `127.0.0.1`。
-  - `GLASSLINE_ALLOWED_HOSTS`：逗号分隔的额外 HTTP Host hostname/IP；精确匹配、忽略请求 port，不允许 scheme、path、userinfo、port 或 wildcard。
-  - `GLASSLINE_MOCK=0`：隐藏 mock provider。
-  - `CODEX_HOME`：覆盖 Codex 数据目录，默认 `~/.codex`。
-- 内部 smoke 命令示例：
+- Default URL: `http://127.0.0.1:6280`
+- Common environment variables:
+  - `PORT`: HTTP port; defaults to `6280`.
+  - `HOST`: bind host; defaults to `127.0.0.1`.
+  - `GLASSLINE_ALLOWED_HOSTS`: comma-separated additional HTTP Host hostnames or IP addresses. Matching is exact and ignores the request port. Schemes, paths, userinfo, ports, and wildcards are not allowed in entries.
+  - `GLASSLINE_MOCK=0`: hide the mock provider.
+  - `CODEX_HOME`: override the Codex data directory; defaults to `~/.codex`.
+- Internal smoke-test example:
   ```sh
   GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home npm start
   ```
-- HTTP API：
+- HTTP API:
   - `GET /api/providers`
   - `GET /api/sessions`
   - `GET /api/sessions/:id`
-  - `GET /api/sessions/:id/timeline?limit=80&cursor=<cursor>`：返回最新 timeline page；带 `cursor` 时返回更早一页。当前 cursor 是上一页窗口的起始 index 字符串。
+  - `GET /api/sessions/:id/timeline?limit=80&cursor=<cursor>`: returns the newest timeline page. Supplying `cursor` requests an older page. The current cursor is the starting index of the preceding window, encoded as a string.
   - `GET /api/raw/:id`
 
-## Provider 当前行为
+## Current Provider Behavior
 
 - `mock`
-  - 返回一个完整 demo session，用于本地 UI 开发。
-  - 可用 `GLASSLINE_MOCK=0` 关闭。
+  - Returns one complete demo session for local UI development.
+  - Disable it with `GLASSLINE_MOCK=0`.
 - `codex`
-  - 进程发现使用 `ps -axo pid=,lstart=,command=`，匹配 `codex` / `codex-cli`，排除 app helper、daemon、Crashpad、Codex Computer Use 等非用户 session 进程。
-  - session-file 读取 `session_index.jsonl` 和 `sessions/**/*.jsonl`。
-  - 列表模式使用 lightweight summary；详情、timeline page 和 raw endpoint 按需读取完整 JSONL。
-  - session title 要保持短标题：优先使用清理后的 `thread_name`；缺失或过长时，详情 parse 从第一条有意义的 user 请求提取标题；最终标题会截断到 96 字符，不能把完整 transcript/prompt blob 当 title。
-  - `session-file` session id 形如 `codex:session-file:<uuid>`，质量通常是 `partial`。
-  - `process-only` session id 形如 `codex:process:<pid>`，质量是 `process-only`。
-  - 可确定 session id 时会把 process source 合并进匹配的 session-file session，并把状态标为 `running`；不能确定时保留 process-only，不用 cwd/时间窗口猜测。
-  - `lastUpdatedAt` 的重要规则：完整 parse 用 index `updated_at` 与 JSONL 最新事件时间取较新值；summary 模式用 index 与 file mtime 取较新值；同一 session id 多个 rollout 文件时保留最新文件。
-  - `resumeRef` 以 `codex resume <uuid>` 形式暴露，复制时只复制 raw provider argument。
+  - Process discovery runs `ps -axo pid=,lstart=,command=`, matches `codex` and `codex-cli`, and excludes non-user-session processes such as app helpers, daemons, Crashpad, and Codex Computer Use.
+  - Session-file discovery reads `session_index.jsonl` and `sessions/**/*.jsonl`.
+  - List mode uses lightweight summaries. Session details, timeline pages, and raw data load the complete JSONL on demand.
+  - Session titles must remain short. Prefer a cleaned `thread_name`. If it is missing or too long, detailed parsing derives a title from the first meaningful user request. Final titles are limited to 96 characters; never use a full transcript or prompt blob as a title.
+  - Session-file IDs have the form `codex:session-file:<uuid>` and normally use `partial` quality.
+  - Process-only IDs have the form `codex:process:<pid>` and use `process-only` quality.
+  - When a session ID can be determined, merge process sources into the matching session-file session and mark it `running`. When the ID cannot be determined, keep a process-only session; do not guess from cwd or time windows.
+  - Important `lastUpdatedAt` rules: full parsing uses the newer of index `updated_at` and the newest JSONL event time; summary mode uses the newer of the index time and file mtime; when multiple rollout files share a session ID, keep the newest file.
+  - `resumeRef` exposes commands in the form `codex resume <uuid>`. Copy actions copy only the raw provider argument.
 - `claude-code`
-  - 当前只做 process discovery，返回 `process-only` session。
-  - 会从 `-r`、`--resume`、`--session-id` 提取 `resumeRef`，命令形式是 `claude -r <value>`。
+  - Currently performs process discovery only and returns `process-only` sessions.
+  - Extracts `resumeRef` from `-r`, `--resume`, and `--session-id`. Commands use the form `claude -r <value>`.
 - `tmux`
-  - `SourceKind` 里已有 `tmux`，但当前没有 tmux adapter 或 web shell。
-  - 如果未来增加，优先考虑只读 `tmux capture-pane` 视图；交互式 terminal 会改变产品边界。
+  - `SourceKind` already includes `tmux`, but there is no tmux adapter or web shell.
+  - If added later, prefer a read-only `tmux capture-pane` view. An interactive terminal would change the product boundary.
 
-## Frontend 当前行为
+## Current Frontend Behavior
 
-- Session list 按后端 `lastUpdatedAt` 降序显示；自动刷新间隔是 8 秒。
-- 打开或切换 session 时，先加载最新 timeline page（默认 80 items）并自动定位到最新 message；向上滚动到 timeline 顶部附近时才用 cursor 加载更早 page 并 prepend。
-- 后台刷新不会强制滚动；如果用户不在 timeline 末尾附近，当前已加载窗口会保留，避免打断阅读。
-- 如果后台刷新发现 selected session 有比当前已加载尾部更新的 `lastUpdatedAt`，会在 timeline 末尾显示 `New content` 控制；点击它或向下滚到当前已加载窗口底部附近时，会从最新 page 沿 `nextCursor` 向后追到与已加载窗口重叠，再按 item id 替换已刷新项并追加未加载项，避免跨页缺口。
-- 当前选中 session 刷新时会保留已经展开的 `activity_group` 和二级 details；切换 session 或浏览器重载后重置展开状态。
-- 主布局是独立滚动容器：
-  - desktop：左侧 `.session-list` 自己滚动，右侧 `.timeline` / `.raw-view` 自己滚动。
-  - mobile：顶部横向 session strip，下面 timeline 独立纵向滚动，`body` 不作为主滚动容器。
-- Timeline 顶层视觉主线是 message：
-  - `message` 独立显示。
-  - 连续 `command` / `tool_call` / `file_change` / `status` 合并为默认折叠的 `activity_group`。
-  - 展开 group 后，command output、tool input/output、file diff 仍是二级折叠。
-- Message 使用安全 markdown 子集渲染：
-  - 支持 fenced code block、inline code、段落、换行、列表、blockquote、轻量 heading、bold/italic、链接。
-  - 不支持 raw HTML；先 escape 再渲染白名单语法。
-  - 链接只允许 `http:`、`https:`、`mailto:`。
-  - Copy button 复制原始 message markdown，不复制 HTML。
-- Raw view 始终是 escaped plaintext，不走 markdown renderer。
-- UI 是信息密度优先的工具界面，不要改成营销页、hero page 或大装饰卡片。
+- The session list is sorted by descending backend `lastUpdatedAt` and refreshes every 8 seconds.
+- Opening or switching sessions loads only the newest timeline page, currently 80 items, and focuses the newest message. Older pages load only when the user scrolls near the top of the timeline.
+- Background refreshes do not force scrolling. If the user is not near the timeline end, preserve the currently loaded window so reading is not interrupted.
+- If a background refresh finds that the selected session has content newer than the loaded tail, show a `New content` control at the end of the timeline. Clicking it, or scrolling near the bottom of the loaded window, walks backward from the newest page through `nextCursor` until it overlaps the loaded window. Replace refreshed items by ID and append unseen items so no cross-page gap is introduced.
+- Refreshing the selected session preserves expanded `activity_group` elements and nested details. Switching sessions or reloading the browser resets disclosure state.
+- The main layout uses independent scroll containers:
+  - Desktop: `.session-list` scrolls independently on the left; `.timeline` and `.raw-view` scroll independently on the right.
+  - Mobile: the session list becomes a horizontal strip above an independently scrolling vertical timeline. `body` is not the primary scroll container.
+- Messages form the top-level visual spine of the timeline:
+  - Each `message` is rendered independently.
+  - Consecutive `command`, `tool_call`, `file_change`, and `status` items are grouped into a collapsed `activity_group` by default.
+  - After a group is expanded, command output, tool input/output, and file diffs remain nested collapsible details.
+- Messages use a safe Markdown subset:
+  - Supports fenced code blocks, inline code, paragraphs, line breaks, lists, blockquotes, lightweight headings, bold, italic, and links.
+  - Does not support raw HTML. Input is escaped before allowlisted syntax is rendered.
+  - Links allow only `http:`, `https:`, and `mailto:`.
+  - Copy buttons copy the original message Markdown, not rendered HTML.
+- Raw view always renders escaped plaintext and never uses the Markdown renderer.
+- The UI is an information-dense tool interface. Do not turn it into a marketing page, hero page, or collection of large decorative cards.
 
-## 测试和开发规则
+## Testing and Development Rules
 
-- 搜索优先用 `rg` / `rg --files`。
-- 手工编辑文件使用 `apply_patch`。
-- `AGENTS.md` 必须进 git；每次大型修改架构、Provider、HTTP API、核心模型、前端行为、运行参数或测试策略时，都要同步更新本文件，避免未来 agent 依据过期上下文工作。
-- 不要引入运行时依赖，除非有清楚理由并且同步更新测试和文档。
-- fixture 和 mock 只能使用合成数据与 example path，不能提交真实 transcript、provider log、token、私有仓库路径或用户 home path。
-- `.github/workflows/ci.yml` 在 macOS Node 20/22 和 Ubuntu Node 20 运行测试，并用完整 history 单独运行敏感信息扫描。
-- 保持 read-only 边界；任何写入、控制、shell、WebSocket、PTY、prompt/approve/kill 行为都需要先做明确产品决策。
-- 变更 provider/parser 时至少补 parser/provider 单测，尤其是：
-  - malformed line 不应让整个 session 消失。
-  - private file/index 缺失或滞后时要保守降级。
-  - source/quality/resume metadata 不能丢。
-  - timeline page 的 `items`、`nextCursor`、`hasMore` 要稳定，不能破坏旧的完整 `GET /api/sessions/:id` 行为。
-  - process matcher 要排除 app helper、daemon、crash handler。
-- 变更 frontend renderer/layout 时至少补对应 frontend tests：
-  - markdown 必须保持安全 escape。
-  - copy text 必须保持 raw source。
-  - activity group 默认折叠。
-  - 初始 timeline 只加载最新 page；向上滚动才加载更早 page，且 prepend 后不能跳动阅读位置。
-  - 读历史时有新内容必须显示 `New content` 状态；点击或向下滚到底部附近能加载最新 page 并 append，不覆盖当前窗口。
-  - mobile 独立滚动和 compact session card 不能回退。
-- 提交前运行：
+- Prefer `rg` and `rg --files` for searches.
+- Use `apply_patch` for manual file edits.
+- `AGENTS.md` must remain tracked. Update it whenever a substantial change affects the architecture, providers, HTTP API, core models, frontend behavior, runtime options, or testing strategy so future agents do not rely on stale context.
+- Do not add runtime dependencies without a clear justification and corresponding tests and documentation.
+- Fixtures and mock data must be synthetic and use example paths. Never commit real transcripts, provider logs, tokens, private repository paths, or user home paths.
+- `.github/workflows/ci.yml` runs tests on macOS with Node.js 20 and 22 and on Ubuntu with Node.js 20. A separate job scans the complete Git history for sensitive data.
+- Preserve the read-only boundary. Any write, control, shell, WebSocket, PTY, prompt, approval, or process-termination behavior requires an explicit product decision first.
+- Provider or parser changes require focused parser/provider tests, especially for these cases:
+  - A malformed line must not make the entire session disappear.
+  - Missing or stale private files and indexes must degrade conservatively.
+  - Source, quality, and resume metadata must not be lost.
+  - Timeline-page `items`, `nextCursor`, and `hasMore` must remain stable without breaking the existing complete `GET /api/sessions/:id` response.
+  - Process matchers must exclude app helpers, daemons, and crash handlers.
+- Frontend renderer or layout changes require corresponding frontend tests, especially for these cases:
+  - Markdown must remain safely escaped.
+  - Copy text must preserve the raw source.
+  - Activity groups must remain collapsed by default.
+  - The initial timeline must load only the newest page. Older pages load on upward scrolling, and prepending must preserve the reader's position.
+  - New content discovered while reading history must show the `New content` state. Clicking it or scrolling near the bottom must load and append the newest pages without replacing the current window.
+  - Independent mobile scrolling and compact session cards must not regress.
+- Before committing, run:
   ```sh
   npm run release-check
   git status --short
   ```
 
-## 已知 MVP 限制
+## Known MVP Limitations
 
-- Provider 数据是 best-effort，尤其 Codex/Claude 私有 session 文件不稳定。
-- Codex session-file status 通常是 `unknown`，只有确定关联到运行中 process 时才标为 `running`。
-- Claude Code 还没有 session-file/transcript parser。
-- 没有通用 `jsonl` adapter、`tmux` adapter、app-server adapter。
-- 没有鉴权、用户系统或远程部署模型；默认不要把它当共享网络服务。
-- 没有 prompt 输入、approve、kill、命令执行或 web shell。
+- Provider data is best-effort, especially unstable private Codex and Claude files.
+- Codex session-file status is normally `unknown`; it becomes `running` only when confidently associated with a live process.
+- Claude Code has no session-file or transcript parser yet.
+- There is no generic `jsonl` adapter, tmux adapter, or app-server adapter.
+- There is no authentication, user system, or remote deployment model. Do not treat the default service as a shared network application.
+- There is no prompt input, approval action, process termination, command execution, or web shell.
