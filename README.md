@@ -2,19 +2,19 @@
 
 [![CI](https://github.com/Abreto/glassline/actions/workflows/ci.yml/badge.svg)](https://github.com/Abreto/glassline/actions/workflows/ci.yml)
 
-Glassline is a read-only local AI agent session viewer. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data without sending prompts or controlling the running agent.
+Glassline is a local AI agent session viewer that is read-only by default. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data. An explicitly enabled control mode can send a plain-text follow-up to an existing idle Codex session through the official Codex CLI.
 
 ## Why Glassline
 
 I built Glassline because I wanted a convenient, mobile-friendly way to follow the progress and results of running agents, and I could not find an existing open-source tool that fit this workflow well.
 
-When I am at my computer, I prefer to work through the provider's official CLI or desktop client. I do not want Glassline to become another execution layer between me and the agent. Glassline is therefore read-only today by design: it provides an observation layer without replacing the tools that actually run the agent.
+When I am at my computer, I prefer to work through the provider's official CLI or desktop client. I do not want Glassline to become another execution layer between me and the agent. Glassline therefore remains read-only by default and delegates its one opt-in follow-up action to the official Codex CLI.
 
-Remote control may be added later, but only as a deliberately narrow capability for authenticated devices. Actions should be delegated to the provider's official CLI or client rather than executed by a separate agent runtime maintained by Glassline.
+Any additional remote control must remain deliberately narrow and available only to authenticated devices. Actions should be delegated to the provider's official CLI or client rather than executed by a separate agent runtime maintained by Glassline.
 
 ## Security and privacy
 
-Agent transcripts and raw provider records can contain source code, local paths, command output, access tokens, or other secrets. Glassline has no built-in authentication and is designed to bind to `127.0.0.1` by default.
+Agent transcripts and raw provider records can contain source code, local paths, command output, access tokens, or other secrets. Glassline has no built-in user authentication and is designed to bind to `127.0.0.1` by default.
 
 Do not expose Glassline directly to a LAN or the public internet. If you use a tunnel or reverse proxy, protect it with authentication such as Cloudflare Access and explicitly allow the proxy hostname with `GLASSLINE_ALLOWED_HOSTS`.
 
@@ -56,6 +56,8 @@ Runtime options:
 - `GLASSLINE_ALLOWED_HOSTS`: comma-separated additional hostnames or IP addresses accepted in HTTP Host headers. Entries are exact, omit ports, and do not support wildcards.
 - `GLASSLINE_MOCK=0`: hide sample provider data.
 - `CODEX_HOME`: override the Codex data directory, default `~/.codex`.
+- `GLASSLINE_CONTROL_TOKEN`: enable authenticated Codex follow-up; must contain at least 32 characters.
+- `GLASSLINE_CODEX_BIN`: absolute Codex executable path. When omitted, Glassline resolves `codex` from `PATH`.
 
 Loopback hosts (`localhost`, `127.0.0.1`, and `::1`) are always accepted. A custom reverse-proxy hostname can be added without changing the default bind address:
 
@@ -71,6 +73,24 @@ HOST=0.0.0.0 GLASSLINE_ALLOWED_HOSTS=192.168.1.10 npm start
 
 This example is not an authenticated deployment model.
 
+## Opt-in Codex follow-up
+
+Without `GLASSLINE_CONTROL_TOKEN`, Glassline exposes no write API and remains read-only. Generate a high-entropy token, keep it outside the repository, and start Glassline with control enabled:
+
+```sh
+openssl rand -base64 32
+GLASSLINE_CONTROL_TOKEN='<generated-token>' GLASSLINE_MOCK=0 npm start
+```
+
+The browser asks for this token before enabling the composer and stores it only in the current browser `sessionStorage`. Closing that browser session removes it. For non-loopback access, the token is a second authorization boundary; Cloudflare Access or an equivalent authenticated reverse proxy is still required.
+
+V1 control is deliberately narrow:
+
+- It sends plain-text follow-up prompts only to existing, idle Codex session-file sessions.
+- It delegates execution to `codex exec resume` and does not implement an agent runtime.
+- It uses Codex `on-request` approvals with Auto-review and inherits the current Codex sandbox, writable roots, network policy, rules, and project configuration.
+- It does not create sessions, queue or interrupt turns, expose manual approvals, accept attachments, terminate processes, or provide shell/PTY access.
+
 ## macOS persistent local service
 
 Install a user-level `launchd` service from the current checkout:
@@ -78,6 +98,14 @@ Install a user-level `launchd` service from the current checkout:
 ```sh
 npm run install-launchd
 ```
+
+To opt into follow-up for the LaunchAgent, pass the token while installing:
+
+```sh
+GLASSLINE_CONTROL_TOKEN='<generated-token>' npm run install-launchd
+```
+
+The installer resolves the current Codex executable, stores its absolute path and the token in the user LaunchAgent plist, and writes that plist with mode `0600`. The token is still plaintext local-user configuration; reinstall the service to rotate or remove it.
 
 The LaunchAgent does not require `sudo`. It runs the current repository with the Node executable used by npm and sets:
 
@@ -125,7 +153,7 @@ Known limits:
 
 - Codex session-file status is usually `unknown` unless it can be matched to a running process.
 - Claude Code has no transcript parser yet.
-- There is no authentication, remote deployment model, prompt input, approve/deny action, process control, command execution, or web shell.
+- There is no built-in user authentication, remote deployment model, new-session input, manual approve/deny action, process control, arbitrary command execution, or web shell.
 
 ## Roadmap
 
@@ -133,14 +161,15 @@ The roadmap is directional rather than a compatibility or delivery commitment. G
 
 ### Now
 
-- Keep the local viewer read-only, local-first, and useful without hosted infrastructure.
+- Keep the local viewer read-only by default, local-first, and useful without hosted infrastructure.
+- Support one opt-in, token-protected Codex follow-up action for existing idle sessions through the official CLI.
 - Improve provider coverage, parser resilience, timeline fidelity, and self-hosting ergonomics.
 - Support personal remote viewing through an external authenticated layer such as Cloudflare Tunnel plus Cloudflare Access.
 
 ### Later
 
 - Explore an optional relay for authenticated devices so users can view local sessions without directly exposing the local server. The relay protocol, topology, hosting model, and trust boundaries are intentionally unspecified for now.
-- Consider a small set of carefully scoped remote-control actions for authenticated devices. Any such capability must have an explicit authorization model, a clear audit trail, revocation, conservative defaults, and a separate security review before implementation.
+- Consider any additional remote-control actions for authenticated devices only after an explicit authorization model, audit trail, revocation design, conservative defaults, and a separate security review.
 
 ### Continuing non-goals
 
@@ -175,8 +204,13 @@ The core registry normalizes provider output, sorts sessions by `lastUpdatedAt`,
 - `GET /api/sessions/:id`
 - `GET /api/sessions/:id/timeline?limit=80&cursor=<cursor>`
 - `GET /api/raw/:id`
+- `GET /api/control`
+- `POST /api/sessions/:id/follow-up`
+- `GET /api/control/runs/:runId`
 
 The timeline endpoint returns the newest page first. `nextCursor` requests an older page, and page limits are capped at 200 items.
+
+Control routes are available only when `GLASSLINE_CONTROL_TOKEN` is configured. POST and run-status requests require the token as a Bearer credential. Follow-up accepts a JSON body containing a plain-text `prompt`; successful submission returns `202` with a run ID.
 
 ## Development and pre-public checks
 

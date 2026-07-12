@@ -14,4 +14,6 @@ The project does not promise a fixed response SLA. Reports will be evaluated acc
 
 ## Local security model
 
-Glassline reads sensitive local agent data and has no built-in authentication. It binds to `127.0.0.1` by default and rejects unapproved HTTP Host headers. Binding to a LAN address or using a tunnel expands the trust boundary and requires an explicit Host allowlist plus an access-controlled reverse proxy such as Cloudflare Access.
+Glassline reads sensitive local agent data and has no built-in user authentication. It binds to `127.0.0.1` by default and rejects unapproved HTTP Host headers. Binding to a LAN address or using a tunnel expands the trust boundary and requires an explicit Host allowlist plus an access-controlled reverse proxy such as Cloudflare Access.
+
+Glassline is read-only unless `GLASSLINE_CONTROL_TOKEN` is configured. That token enables only existing-session Codex follow-up and is required as a Bearer credential for every control request. It is not identity authentication and does not replace the external access-controlled proxy. Treat the token and a launchd plist containing it as secrets. Follow-up inherits the user's Codex sandbox and project configuration while routing eligible approval requests through Codex Auto-review.

@@ -15,7 +15,7 @@ export function launchdPaths(homeDir) {
   };
 }
 
-export function buildLaunchdPlist({ repoRoot, nodePath, paths }) {
+export function buildLaunchdPlist({ repoRoot, nodePath, paths, controlToken, codexBin }) {
   const serverPath = path.join(repoRoot, "src", "server.mjs");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -39,6 +39,7 @@ export function buildLaunchdPlist({ repoRoot, nodePath, paths }) {
     <string>6280</string>
     <key>GLASSLINE_MOCK</key>
     <string>0</string>
+${launchdEnvironmentEntry("GLASSLINE_CONTROL_TOKEN", controlToken)}${launchdEnvironmentEntry("GLASSLINE_CODEX_BIN", codexBin)}
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -51,6 +52,13 @@ export function buildLaunchdPlist({ repoRoot, nodePath, paths }) {
 </dict>
 </plist>
 `;
+}
+
+export function launchdPlistWriteOptions({ controlToken } = {}) {
+  return {
+    encoding: "utf8",
+    mode: controlToken ? 0o600 : 0o644
+  };
 }
 
 export async function uninstallLaunchdService({
@@ -113,4 +121,11 @@ function escapeXml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function launchdEnvironmentEntry(key, value) {
+  if (!value) {
+    return "";
+  }
+  return `    <key>${escapeXml(key)}</key>\n    <string>${escapeXml(value)}</string>\n`;
 }

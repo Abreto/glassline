@@ -10,10 +10,12 @@ import {
   buildLaunchdPlist,
   GLASSLINE_LAUNCHD_LABEL,
   launchdPaths,
+  launchdPlistWriteOptions,
   serviceTarget,
   uninstallLaunchdService,
   userDomain
 } from "./launchd-utils.mjs";
+import { parseControlConfig, resolveCodexBinary } from "../src/control/control-auth.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,6 +27,9 @@ await main();
 async function main() {
   ensureMacOS();
   const uid = process.getuid();
+  const controlConfig = parseControlConfig(process.env);
+  const codexBin = controlConfig.enabled ? await resolveCodexBinary(controlConfig) : undefined;
+  const controlToken = controlConfig.enabled ? process.env.GLASSLINE_CONTROL_TOKEN : undefined;
 
   await mkdir(paths.launchAgentsDir, { recursive: true });
   await mkdir(paths.logDir, { recursive: true });
@@ -42,9 +47,11 @@ async function main() {
     buildLaunchdPlist({
       repoRoot,
       nodePath: process.execPath,
-      paths
+      paths,
+      controlToken,
+      codexBin
     }),
-    "utf8"
+    launchdPlistWriteOptions({ controlToken })
   );
 
   await bootstrapService(uid);

@@ -5,6 +5,7 @@ import {
   GLASSLINE_LAUNCHD_LABEL,
   buildLaunchdPlist,
   isIgnorableLaunchctlError,
+  launchdPlistWriteOptions,
   launchdPaths,
   uninstallLaunchdService
 } from "../scripts/launchd-utils.mjs";
@@ -38,6 +39,27 @@ test("buildLaunchdPlist escapes XML text values", () => {
   assert.match(plist, /\/tmp\/node &quot;quoted&quot;/);
   assert.doesNotMatch(plist, /A&B <Glassline>/);
   assert.doesNotMatch(plist, /node "quoted"/);
+});
+
+test("buildLaunchdPlist includes opt-in control values and escapes secrets", () => {
+  const plist = buildLaunchdPlist({
+    repoRoot: "/repo/glassline",
+    nodePath: "/opt/homebrew/bin/node",
+    paths: launchdPaths("/Users/me"),
+    controlToken: "abcdefghijklmnopqrstuvwxyz12345&",
+    codexBin: "/opt/homebrew/bin/codex"
+  });
+
+  assert.match(plist, /<key>GLASSLINE_CONTROL_TOKEN<\/key>\s*<string>abcdefghijklmnopqrstuvwxyz12345&amp;<\/string>/);
+  assert.match(plist, /<key>GLASSLINE_CODEX_BIN<\/key>\s*<string>\/opt\/homebrew\/bin\/codex<\/string>/);
+  assert.deepEqual(launchdPlistWriteOptions({ controlToken: "secret" }), {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  assert.deepEqual(launchdPlistWriteOptions({}), {
+    encoding: "utf8",
+    mode: 0o644
+  });
 });
 
 test("launchdPaths returns user-level LaunchAgent and retained log locations", () => {
