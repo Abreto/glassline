@@ -5,9 +5,12 @@ This document records the current project state for future coding agents. It is 
 ## Product Boundaries
 
 - Glassline is a read-only local AI agent session viewer. It provides a browser interface for inspecting local agent sessions, transcripts, command output, file changes, and raw source data.
-- Do not add prompt submission, approve/deny actions, process termination, command input, an interactive web shell, a WebSocket terminal, or any other execution-path control without an explicit product decision.
+- The shipped product remains read-only. The roadmap permits future, narrowly scoped remote-control actions for authenticated devices, but only after a separate product and security design defines authorization, auditability, revocation, and conservative defaults. Do not introduce those actions as an incidental extension of viewing or provider work.
+- A general-purpose web shell, arbitrary command input, raw PTY access, and an unrestricted WebSocket terminal remain outside the product boundary.
 - The service is local by default: `HOST` defaults to `127.0.0.1`. Setting `HOST=0.0.0.0` for phone testing exposes Glassline to the local network and does not represent the product's default security model.
 - HTTP Host validation allows only `localhost`, `127.0.0.1`, and `::1` by default. Reverse-proxy or LAN access must explicitly add exact hostnames or IP addresses through `GLASSLINE_ALLOWED_HOSTS`. This allowlist is not authentication; non-loopback access still requires external authentication.
+- The current personal remote-access model is a user-managed Cloudflare Tunnel behind Cloudflare Access or an equivalent authenticated reverse proxy. Glassline does not install, configure, or operate that layer.
+- A future relay is a roadmap direction only. Keep its protocol, topology, hosting model, and trust boundaries architecture-neutral until a dedicated design is approved.
 - Treat private provider files as best-effort data sources, never as stable APIs. Handle parse failures, missing fields, and stale indexes conservatively.
 - Session and timeline data should carry `SourceRef` metadata wherever possible and must use `quality` to communicate data quality: `complete`, `partial`, `process-only`, or `stale`.
 
@@ -114,7 +117,7 @@ This document records the current project state for future coding agents. It is 
 - Do not add runtime dependencies without a clear justification and corresponding tests and documentation.
 - Fixtures and mock data must be synthetic and use example paths. Never commit real transcripts, provider logs, tokens, private repository paths, or user home paths.
 - `.github/workflows/ci.yml` runs tests on macOS with Node.js 20 and 22 and on Ubuntu with Node.js 20. A separate job scans the complete Git history for sensitive data.
-- Preserve the read-only boundary. Any write, control, shell, WebSocket, PTY, prompt, approval, or process-termination behavior requires an explicit product decision first.
+- Preserve the current read-only boundary. Roadmap references to an authenticated relay or narrowly scoped remote control do not authorize implementation; each capability requires a dedicated product and security decision first.
 - Provider or parser changes require focused parser/provider tests, especially for these cases:
   - A malformed line must not make the entire session disappear.
   - Missing or stale private files and indexes must degrade conservatively.
@@ -140,5 +143,5 @@ This document records the current project state for future coding agents. It is 
 - Codex session-file status is normally `unknown`; it becomes `running` only when confidently associated with a live process.
 - Claude Code has no session-file or transcript parser yet.
 - There is no generic `jsonl` adapter, tmux adapter, or app-server adapter.
-- There is no authentication, user system, or remote deployment model. Do not treat the default service as a shared network application.
+- There is no built-in authentication, user system, relay, or remote deployment model. Personal remote access currently depends on an external authenticated reverse proxy. Do not treat the default service as a shared network application.
 - There is no prompt input, approval action, process termination, command execution, or web shell.

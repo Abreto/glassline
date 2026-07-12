@@ -89,6 +89,18 @@ npm run uninstall-launchd
 
 Uninstalling stops the LaunchAgent and removes its plist while retaining logs for troubleshooting. The scripts do not install or manage Cloudflare Tunnel.
 
+## Personal remote access today
+
+Glassline does not currently include a remote service or authentication layer. For personal remote access, run Glassline on loopback and place a user-managed Cloudflare Tunnel behind Cloudflare Access or an equivalent authenticated reverse proxy.
+
+Allow the public hostname without changing the loopback bind address:
+
+```sh
+GLASSLINE_ALLOWED_HOSTS=glassline.example.com GLASSLINE_MOCK=0 npm start
+```
+
+Configure and operate the tunnel, identity policy, TLS, and access logs outside Glassline. Do not expose the local HTTP server directly or treat `GLASSLINE_ALLOWED_HOSTS` as authentication.
+
 ## Provider behavior
 
 - `mock`: a complete synthetic session for UI development.
@@ -102,6 +114,27 @@ Known limits:
 - Codex session-file status is usually `unknown` unless it can be matched to a running process.
 - Claude Code has no transcript parser yet.
 - There is no authentication, remote deployment model, prompt input, approve/deny action, process control, command execution, or web shell.
+
+## Roadmap
+
+The roadmap is directional rather than a compatibility or delivery commitment. Glassline will keep the implementation architecture neutral until each phase has a separate product and security design.
+
+### Now
+
+- Keep the local viewer read-only, local-first, and useful without hosted infrastructure.
+- Improve provider coverage, parser resilience, timeline fidelity, and self-hosting ergonomics.
+- Support personal remote viewing through an external authenticated layer such as Cloudflare Tunnel plus Cloudflare Access.
+
+### Later
+
+- Explore an optional relay for authenticated devices so users can view local sessions without directly exposing the local server. The relay protocol, topology, hosting model, and trust boundaries are intentionally unspecified for now.
+- Consider a small set of carefully scoped remote-control actions for authenticated devices. Any such capability must have an explicit authorization model, a clear audit trail, revocation, conservative defaults, and a separate security review before implementation.
+
+### Continuing non-goals
+
+- Unauthenticated public access or a shared multi-user deployment by default.
+- A general-purpose web shell, arbitrary command input, raw PTY access, or an unrestricted WebSocket terminal.
+- Expanding remote control implicitly as part of provider parsing or read-only viewing work.
 
 ## Provider contract
 
