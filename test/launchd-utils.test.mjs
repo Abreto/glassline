@@ -7,7 +7,8 @@ import {
   isIgnorableLaunchctlError,
   launchdPlistWriteOptions,
   launchdPaths,
-  uninstallLaunchdService
+  uninstallLaunchdService,
+  writeLaunchdPlist
 } from "../scripts/launchd-utils.mjs";
 
 test("buildLaunchdPlist writes the Glassline launch agent contract", () => {
@@ -60,6 +61,28 @@ test("buildLaunchdPlist includes opt-in control values and escapes secrets", () 
     encoding: "utf8",
     mode: 0o644
   });
+});
+
+test("writeLaunchdPlist explicitly tightens permissions when control is enabled", async () => {
+  const calls = [];
+
+  await writeLaunchdPlist({
+    filePath: "/Users/me/Library/LaunchAgents/com.glassline.local.plist",
+    contents: "<plist/>",
+    controlToken: "abcdefghijklmnopqrstuvwxyz123456",
+    writeFile: async (...args) => calls.push(["write", ...args]),
+    chmodFile: async (...args) => calls.push(["chmod", ...args])
+  });
+
+  assert.deepEqual(calls, [
+    [
+      "write",
+      "/Users/me/Library/LaunchAgents/com.glassline.local.plist",
+      "<plist/>",
+      { encoding: "utf8", mode: 0o600 }
+    ],
+    ["chmod", "/Users/me/Library/LaunchAgents/com.glassline.local.plist", 0o600]
+  ]);
 });
 
 test("launchdPaths returns user-level LaunchAgent and retained log locations", () => {

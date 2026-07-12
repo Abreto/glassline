@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+
+process.stdin.resume();
+process.stdin.on("end", () => {
+  process.stdout.write(`${JSON.stringify({ type: "turn.started" })}\n`);
+  setTimeout(() => {
+    process.stdout.write(`${JSON.stringify({ type: "turn.completed" })}\n`);
+  }, 100);
+});

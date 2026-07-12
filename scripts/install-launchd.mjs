@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,10 +10,10 @@ import {
   buildLaunchdPlist,
   GLASSLINE_LAUNCHD_LABEL,
   launchdPaths,
-  launchdPlistWriteOptions,
   serviceTarget,
   uninstallLaunchdService,
-  userDomain
+  userDomain,
+  writeLaunchdPlist
 } from "./launchd-utils.mjs";
 import { parseControlConfig, resolveCodexBinary } from "../src/control/control-auth.mjs";
 
@@ -42,17 +42,19 @@ async function main() {
     log: () => {}
   });
 
-  await writeFile(
-    paths.plistPath,
-    buildLaunchdPlist({
+  await writeLaunchdPlist({
+    filePath: paths.plistPath,
+    contents: buildLaunchdPlist({
       repoRoot,
       nodePath: process.execPath,
       paths,
       controlToken,
       codexBin
     }),
-    launchdPlistWriteOptions({ controlToken })
-  );
+    controlToken,
+    writeFile,
+    chmodFile: chmod
+  });
 
   await bootstrapService(uid);
   await startService(uid);

@@ -29,6 +29,9 @@ export function createCodexFollowUpController({
       if (activeSessions.has(sessionId)) {
         throw new FollowUpControllerError("busy", "A follow-up is already running");
       }
+      if (!reserveRunCapacity(runs)) {
+        throw new FollowUpControllerError("capacity", "Too many follow-up runs are active");
+      }
 
       const run = {
         id: randomId(),
@@ -38,7 +41,6 @@ export function createCodexFollowUpController({
       };
       runs.set(run.id, run);
       activeSessions.add(sessionId);
-      trimRuns(runs);
 
       let child;
       try {
@@ -71,6 +73,11 @@ export function createCodexFollowUpController({
       let outcome;
       let spawned = false;
       const lines = createInterface({ input: child.stdout });
+      const handleStreamError = (error) => failRun(run, activeSessions, now, error);
+      child.stdin.on("error", handleStreamError);
+      child.stdout.on("error", handleStreamError);
+      child.stderr.on("error", handleStreamError);
+      lines.on("error", handleStreamError);
       lines.on("line", (line) => {
         try {
           const event = JSON.parse(line);
@@ -174,17 +181,18 @@ function cleanupRuns(runs, now) {
   }
 }
 
-function trimRuns(runs) {
-  if (runs.size <= MAX_RUNS) {
-    return;
+function reserveRunCapacity(runs) {
+  if (runs.size < MAX_RUNS) {
+    return true;
   }
 
   for (const [id, run] of runs) {
     if (run.status !== "running") {
       runs.delete(id);
-      if (runs.size <= MAX_RUNS) {
-        return;
+      if (runs.size < MAX_RUNS) {
+        return true;
       }
     }
   }
+  return runs.size < MAX_RUNS;
 }

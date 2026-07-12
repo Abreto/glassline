@@ -29,7 +29,7 @@ This document records the current project state for future coding agents. It is 
 - `src/http-security.mjs` parses `GLASSLINE_ALLOWED_HOSTS`, validates HTTP Host headers, and defines browser security headers.
 - `src/server-listen.mjs` handles server listening and friendly errors such as `EADDRINUSE` and `EPERM`.
 - `src/control/control-auth.mjs` validates opt-in control configuration, performs constant-time Bearer checks, and resolves the Codex executable without a shell.
-- `src/control/codex-follow-up.mjs` owns per-session run locks and delegates one turn to `codex exec resume --json`; it is intentionally separate from the read-only provider contract.
+- `src/control/codex-follow-up.mjs` owns per-session run locks and a bounded 100-record run map, then delegates one turn to `codex exec resume --json`; it is intentionally separate from the read-only provider contract.
 - `src/core/provider.ts` defines the core models: `ProviderAdapter`, `Session`, `Turn`, `TimelinePage`, `TimelineItem`, `Message`, `CommandRun`, `ToolCall`, `FileChange`, `Status`, `SourceRef`, and `ResumeRef`.
 - `src/core/session-registry.mjs` aggregates providers, normalizes data, sorts by descending `lastUpdatedAt`, normalizes `resumeRef`, provides timeline-page and raw-data fallbacks, and creates adapter-error sessions.
 - Provider adapters live in `src/providers/`:

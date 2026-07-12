@@ -168,6 +168,25 @@ test("follow-up accepts one authenticated idle Codex session prompt", async () =
   }]);
 });
 
+test("follow-up reports controller capacity exhaustion as unavailable", async () => {
+  const controller = fakeController();
+  controller.submitFollowUp = async () => {
+    throw Object.assign(new Error("Too many follow-up runs are active"), { code: "capacity" });
+  };
+  const handler = createHandler({
+    control: true,
+    providers: [providerWithSession()],
+    controller
+  });
+  const response = fakeResponse();
+
+  await handler(controlRequest(), response);
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(JSON.parse(response.body), { error: "Codex follow-up is unavailable" });
+  assertSecurityHeaders(response.headers);
+});
+
 test("follow-up validates JSON size and session eligibility", async () => {
   const baseOptions = {
     control: true,

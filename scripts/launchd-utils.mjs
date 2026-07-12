@@ -61,6 +61,12 @@ export function launchdPlistWriteOptions({ controlToken } = {}) {
   };
 }
 
+export async function writeLaunchdPlist({ filePath, contents, controlToken, writeFile, chmodFile }) {
+  const options = launchdPlistWriteOptions({ controlToken });
+  await writeFile(filePath, contents, options);
+  await chmodFile(filePath, options.mode);
+}
+
 export async function uninstallLaunchdService({
   paths,
   uid = process.getuid(),

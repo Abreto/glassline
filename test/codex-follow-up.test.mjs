@@ -117,6 +117,82 @@ test("controller releases the lock when spawning fails", async () => {
   assert.equal(spawnCount, 2);
 });
 
+test("controller fails safely and releases the lock when a child stream errors", async () => {
+  const first = fakeChild();
+  const second = fakeChild();
+  let spawnCount = 0;
+  const controller = createCodexFollowUpController({
+    codexBin: "/bin/codex",
+    randomId: () => `stream-run-${spawnCount + 1}`,
+    spawnProcess() {
+      const child = spawnCount++ === 0 ? first : second;
+      queueMicrotask(() => child.emit("spawn"));
+      return child;
+    }
+  });
+
+  await controller.submitFollowUp(submission("first"));
+  assert.doesNotThrow(() => first.stdout.emit("error", new Error("stdout unavailable")));
+  assert.equal(controller.getRun("stream-run-1").status, "failed");
+  assert.match(controller.getRun("stream-run-1").error, /stdout unavailable/);
+
+  const next = await controller.submitFollowUp(submission("next"));
+  assert.equal(next.status, "running");
+});
+
+test("controller retains completed runs when capacity is still available", async () => {
+  const first = fakeChild();
+  const second = fakeChild();
+  let spawnCount = 0;
+  const controller = createCodexFollowUpController({
+    codexBin: "/bin/codex",
+    randomId: () => `retained-run-${spawnCount + 1}`,
+    spawnProcess() {
+      const child = spawnCount++ === 0 ? first : second;
+      queueMicrotask(() => child.emit("spawn"));
+      return child;
+    }
+  });
+
+  await controller.submitFollowUp(submission("first"));
+  first.stdout.write(`${JSON.stringify({ type: "turn.completed" })}\n`);
+  first.emit("close", 0);
+  assert.equal(controller.getRun("retained-run-1").status, "complete");
+
+  await controller.submitFollowUp({ ...submission("second"), sessionId: `${SESSION_ID}:second` });
+  assert.equal(controller.getRun("retained-run-1").status, "complete");
+});
+
+test("controller rejects submissions once 100 run records are active", async () => {
+  let spawnCount = 0;
+  const controller = createCodexFollowUpController({
+    codexBin: "/bin/codex",
+    randomId: () => `run-${spawnCount + 1}`,
+    spawnProcess() {
+      spawnCount += 1;
+      const child = fakeChild();
+      queueMicrotask(() => child.emit("spawn"));
+      return child;
+    }
+  });
+
+  for (let index = 0; index < 100; index += 1) {
+    await controller.submitFollowUp({
+      ...submission(`prompt-${index}`),
+      sessionId: `${SESSION_ID}:${index}`
+    });
+  }
+
+  await assert.rejects(
+    controller.submitFollowUp({ ...submission("overflow"), sessionId: `${SESSION_ID}:overflow` }),
+    (error) => {
+      assert.equal(error.code, "capacity");
+      return true;
+    }
+  );
+  assert.equal(spawnCount, 100);
+});
+
 function submission(prompt) {
   return {
     sessionId: SESSION_ID,

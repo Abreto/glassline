@@ -234,7 +234,7 @@ async function handleFollowUp(
       sendJson(response, 409, { error: "Session is not idle" });
       return;
     }
-    if (error?.code === "spawn-unavailable") {
+    if (error?.code === "spawn-unavailable" || error?.code === "capacity") {
       sendJson(response, 503, { error: "Codex follow-up is unavailable" });
       return;
     }

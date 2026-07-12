@@ -38,7 +38,7 @@ list/read session data          authorize, validate, and spawn one turn
 
 The Codex session parser adds `turnState: "running" | "idle" | "unknown"` to `Session`. It derives the state conservatively from valid JSONL records and does not change the existing process-based `Session.status` meaning.
 
-The controller owns an in-memory map of active and recently completed runs. It re-reads the selected session after acquiring a per-session lock so two simultaneous POST requests cannot both pass the idle check. Completed records contain only run ID, session ID, status, timestamps, and a bounded sanitized error; prompts and CLI event streams are not retained. Records expire after ten minutes and the map is capped at 100 entries.
+The controller owns an in-memory map of active and recently completed runs. It acquires a per-session lock synchronously before spawning so two simultaneous POST requests cannot both start a turn. Completed records contain only run ID, session ID, status, timestamps, and a bounded sanitized error; prompts and CLI event streams are not retained. Records expire after ten minutes, and the map is capped at 100 entries; when all 100 are active, new submissions fail before spawning.
 
 The child process is spawned without a shell using the equivalent of:
 
@@ -52,7 +52,7 @@ codex exec resume \
 
 The prompt is written to stdin and the process cwd is the session `projectPath`. The controller parses stdout as bounded JSONL and recognizes `turn.completed`, `turn.failed`, and `error`; it retains at most 8 KiB of sanitized stderr/error detail. The active lock is released on completion, nonzero exit, spawn error, or stream failure. A successful `spawn` event is required before the HTTP request returns `202`.
 
-`GLASSLINE_CODEX_BIN` optionally selects an absolute executable. Otherwise startup resolves `codex` from `PATH` without invoking a shell. When control is enabled, failure to resolve an executable is a startup configuration error. The launchd installer resolves the current Codex executable and writes its absolute path into the plist. If it copies `GLASSLINE_CONTROL_TOKEN`, the plist is written with mode `0600`, and the documentation warns that the token is stored there for the local user.
+`GLASSLINE_CODEX_BIN` optionally selects an absolute executable. Otherwise startup resolves `codex` from `PATH` without invoking a shell. When control is enabled, failure to resolve an executable is a startup configuration error. The launchd installer resolves the current Codex executable and writes its absolute path into the plist. If it copies `GLASSLINE_CONTROL_TOKEN`, the plist is explicitly set to mode `0600` even when replacing an existing file, and the documentation warns that the token is stored there for the local user.
 
 ## HTTP Interface
 
