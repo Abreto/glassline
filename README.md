@@ -4,6 +4,14 @@
 
 Glassline is a read-only local AI agent session viewer. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data without sending prompts or controlling the running agent.
 
+## Why Glassline
+
+I built Glassline because I wanted a convenient, mobile-friendly way to follow the progress and results of running agents, and I could not find an existing open-source tool that fit this workflow well.
+
+When I am at my computer, I prefer to work through the provider's official CLI or desktop client. I do not want Glassline to become another execution layer between me and the agent. Glassline is therefore read-only today by design: it provides an observation layer without replacing the tools that actually run the agent.
+
+Remote control may be added later, but only as a deliberately narrow capability for authenticated devices. Actions should be delegated to the provider's official CLI or client rather than executed by a separate agent runtime maintained by Glassline.
+
 ## Security and privacy
 
 Agent transcripts and raw provider records can contain source code, local paths, command output, access tokens, or other secrets. Glassline has no built-in authentication and is designed to bind to `127.0.0.1` by default.
