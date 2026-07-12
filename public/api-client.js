@@ -1,8 +1,11 @@
-export async function requestJson(url, { fetchImpl = globalThis.fetch, label = "Request failed" } = {}) {
+export async function requestJson(
+  url,
+  { fetchImpl = globalThis.fetch, label = "Request failed", request } = {}
+) {
   let response;
 
   try {
-    response = await fetchImpl(url);
+    response = await fetchImpl(url, request);
   } catch (error) {
     throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`);
   }

@@ -27,8 +27,31 @@
         </nav>
         <section class="timeline" id="timeline-view"></section>
         <section class="raw-view is-hidden" id="raw-view"></section>
+        <section class="control-panel is-hidden" id="control-panel" aria-label="Codex follow-up">
+          <div class="control-form">
+            <textarea id="follow-up-input" rows="2" maxlength="16384" placeholder="Follow up with Codex" aria-label="Follow-up prompt"></textarea>
+            <div class="control-actions">
+              <button class="secondary-button" id="control-unlock-button" type="button">Unlock</button>
+              <button class="send-button" id="follow-up-send-button" type="button">Send</button>
+            </div>
+          </div>
+          <p class="control-status" id="control-status" aria-live="polite"></p>
+        </section>
       </main>
     </div>
+    <dialog class="control-token-dialog" id="control-token-dialog">
+      <form id="control-token-form" method="dialog">
+        <h2>Unlock follow-up</h2>
+        <p>Enter the control token configured on this Glassline server.</p>
+        <label for="control-token-input">Control token</label>
+        <input id="control-token-input" name="token" type="password" autocomplete="off" required>
+        <p class="control-token-error" id="control-token-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button class="secondary-button" value="cancel" type="button" id="control-token-cancel">Cancel</button>
+          <button class="send-button" type="submit">Unlock</button>
+        </div>
+      </form>
+    </dialog>
     <script src="/app.js" type="module"></script>
   </body>
 </html>

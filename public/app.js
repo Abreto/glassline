@@ -17,6 +17,13 @@ import {
   textForResumeRef
 } from "./session-renderers.js";
 import { renderErrorState, requestJson } from "./api-client.js";
+import {
+  controlAuthOptions,
+  controlRequestOptions,
+  followUpAvailability,
+  refreshDelay,
+  validateFollowUpPrompt
+} from "./control-client.js";
 
 const TIMELINE_PAGE_LIMIT = 80;
 const TIMELINE_PRELOAD_PX = 96;
@@ -32,6 +39,10 @@ const state = {
   timelineHasNewer: false,
   timelineLoadingNewer: false,
   view: "timeline",
+  control: { enabled: false, authorized: false, providers: [] },
+  controlToken: readSessionStorage("glassline.controlToken"),
+  activeRuns: new Map(),
+  controlMessages: new Map(),
   copyText: new Map(),
   copyTextIdsByScope: new Map(),
   nextCopyTextId: 1
@@ -43,10 +54,25 @@ const detailHeaderEl = document.querySelector("#detail-header");
 const timelineEl = document.querySelector("#timeline-view");
 const rawEl = document.querySelector("#raw-view");
 const refreshButton = document.querySelector("#refresh-button");
+const controlPanelEl = document.querySelector("#control-panel");
+const followUpInput = document.querySelector("#follow-up-input");
+const followUpSendButton = document.querySelector("#follow-up-send-button");
+const controlUnlockButton = document.querySelector("#control-unlock-button");
+const controlStatusEl = document.querySelector("#control-status");
+const controlTokenDialog = document.querySelector("#control-token-dialog");
+const controlTokenForm = document.querySelector("#control-token-form");
+const controlTokenInput = document.querySelector("#control-token-input");
+const controlTokenError = document.querySelector("#control-token-error");
+const controlTokenCancel = document.querySelector("#control-token-cancel");
 const tabs = [...document.querySelectorAll(".tab")];
+let refreshTimer;
 
 refreshButton.addEventListener("click", () => loadSessions({ preserveSelection: true }));
 timelineEl.addEventListener("scroll", () => handleTimelineScroll());
+controlUnlockButton?.addEventListener("click", () => openControlTokenDialog());
+controlTokenCancel?.addEventListener("click", () => controlTokenDialog?.close());
+followUpSendButton?.addEventListener("click", () => submitFollowUp());
+controlTokenForm?.addEventListener("submit", (event) => authorizeControlToken(event));
 
 document.body.addEventListener("click", async (event) => {
   const sessionButton = event.target.closest("[data-session-id]");
@@ -81,8 +107,9 @@ tabs.forEach((tab) => {
   });
 });
 
+await loadControlCapability();
 await loadSessions({ preserveSelection: false });
-window.setInterval(() => loadSessions({ preserveSelection: true }), 8000);
+scheduleRefresh();
 
 async function loadSessions({ preserveSelection }) {
   countEl.textContent = "Refreshing";
@@ -108,6 +135,7 @@ async function loadSessions({ preserveSelection }) {
   }
 
   state.sessions = payload.sessions ?? [];
+  restoreActiveRuns();
 
   if (!preserveSelection || !state.sessions.some((session) => session.id === state.selectedId)) {
     state.selectedId = state.sessions[0]?.id ?? null;
@@ -144,6 +172,7 @@ async function renderSelectedSession({
     state.renderedTimelineSessionId = null;
     detailHeaderEl.innerHTML = '<div class="detail-heading"><h2>No sessions</h2></div>';
     timelineEl.innerHTML = '<p class="empty-state">No provider data available.</p>';
+    hideControlPanel();
     countEl.textContent = "0 sessions";
     return;
   }
@@ -161,6 +190,7 @@ async function renderSelectedSession({
   }
 
   renderDetailHeader(session);
+  renderControlPanel();
 
   if (state.view === "raw") {
     await renderRaw();
@@ -310,6 +340,237 @@ function renderTabs() {
   tabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === state.view));
   timelineEl.classList.toggle("is-hidden", state.view !== "timeline");
   rawEl.classList.toggle("is-hidden", state.view !== "raw");
+  renderControlPanel();
+}
+
+async function loadControlCapability() {
+  try {
+    const payload = await requestJson("/api/control", {
+      label: "Unable to load control capability",
+      request: controlAuthOptions(state.controlToken)
+    });
+    state.control = payload.followUp ?? { enabled: false, authorized: false, providers: [] };
+    if (!state.control.authorized && state.controlToken) {
+      clearControlToken();
+    }
+  } catch {
+    if (state.controlToken) {
+      clearControlToken();
+      try {
+        const payload = await requestJson("/api/control", {
+          label: "Unable to load control capability"
+        });
+        state.control = payload.followUp ?? { enabled: false, authorized: false, providers: [] };
+        return;
+      } catch {
+        // Fall through to read-only behavior.
+      }
+    }
+    state.control = { enabled: false, authorized: false, providers: [] };
+  }
+}
+
+function renderControlPanel() {
+  if (!controlPanelEl || !followUpInput || !followUpSendButton || !controlUnlockButton) {
+    return;
+  }
+
+  const session = selectedSession();
+  const activeRun = session ? state.activeRuns.get(session.id) : null;
+  const availability = followUpAvailability(session, state.control, Boolean(activeRun));
+  const visible = state.view === "timeline" && availability.supported;
+  controlPanelEl.classList.toggle("is-hidden", !visible);
+  if (!visible) {
+    return;
+  }
+
+  followUpInput.disabled = !availability.ready;
+  followUpSendButton.disabled = !availability.ready;
+  controlUnlockButton.textContent = state.control.authorized ? "Change token" : "Unlock";
+  const message = state.controlMessages.get(session.id) ?? availability.reason;
+  if (controlStatusEl) {
+    controlStatusEl.textContent = message;
+    controlStatusEl.dataset.tone = message && /failed|unable|invalid|denied/i.test(message) ? "bad" : "neutral";
+  }
+}
+
+function hideControlPanel() {
+  controlPanelEl?.classList.toggle("is-hidden", true);
+}
+
+function openControlTokenDialog() {
+  if (!controlTokenDialog || !controlTokenInput) {
+    return;
+  }
+  controlTokenInput.value = "";
+  if (controlTokenError) {
+    controlTokenError.textContent = "";
+  }
+  controlTokenDialog.showModal();
+  controlTokenInput.focus();
+}
+
+async function authorizeControlToken(event) {
+  event.preventDefault();
+  const token = controlTokenInput?.value ?? "";
+  try {
+    const payload = await requestJson("/api/control", {
+      label: "Unable to authorize control",
+      request: controlAuthOptions(token)
+    });
+    if (!payload.followUp?.authorized) {
+      throw new Error("Invalid control token");
+    }
+    state.control = payload.followUp;
+    state.controlToken = token;
+    writeSessionStorage("glassline.controlToken", token);
+    if (controlTokenError) {
+      controlTokenError.textContent = "";
+    }
+    controlTokenDialog?.close();
+    renderControlPanel();
+  } catch (error) {
+    clearControlToken();
+    if (controlTokenError) {
+      controlTokenError.textContent = detailForError(error, "Unable to authorize control");
+    }
+  }
+}
+
+async function submitFollowUp() {
+  const session = selectedSession();
+  if (!session || !state.controlToken || !followUpInput) {
+    return;
+  }
+  const availability = followUpAvailability(
+    session,
+    state.control,
+    Boolean(state.activeRuns.get(session.id))
+  );
+  const validation = validateFollowUpPrompt(followUpInput.value);
+  if (!availability.ready || !validation.valid) {
+    state.controlMessages.set(session.id, availability.reason || validation.error);
+    renderControlPanel();
+    return;
+  }
+
+  try {
+    const payload = await requestJson(
+      `/api/sessions/${encodeURIComponent(session.id)}/follow-up`,
+      {
+        label: "Unable to send follow-up",
+        request: controlRequestOptions(state.controlToken, { prompt: followUpInput.value })
+      }
+    );
+    state.activeRuns.set(session.id, payload.runId);
+    writeSessionStorage(activeRunKey(session.id), payload.runId);
+    state.controlMessages.set(session.id, "Follow-up is running");
+    followUpInput.value = "";
+    renderControlPanel();
+    scheduleRefresh(1000);
+  } catch (error) {
+    state.controlMessages.set(session.id, detailForError(error, "Unable to send follow-up"));
+    renderControlPanel();
+  }
+}
+
+async function pollActiveRuns() {
+  if (!state.controlToken) {
+    return;
+  }
+
+  for (const [sessionId, runId] of [...state.activeRuns]) {
+    try {
+      const payload = await requestJson(`/api/control/runs/${encodeURIComponent(runId)}`, {
+        label: "Unable to load follow-up status",
+        request: controlAuthOptions(state.controlToken)
+      });
+      if (payload.run?.status === "running") {
+        continue;
+      }
+      clearActiveRun(sessionId);
+      state.controlMessages.set(
+        sessionId,
+        payload.run?.status === "failed"
+          ? `Follow-up failed: ${payload.run.error ?? "Unknown error"}`
+          : "Follow-up complete"
+      );
+    } catch (error) {
+      clearActiveRun(sessionId);
+      state.controlMessages.set(
+        sessionId,
+        detailForError(error, "Unable to load follow-up status")
+      );
+    }
+  }
+}
+
+function restoreActiveRuns() {
+  for (const session of state.sessions) {
+    const runId = readSessionStorage(activeRunKey(session.id));
+    if (runId && !state.activeRuns.has(session.id)) {
+      state.activeRuns.set(session.id, runId);
+    }
+  }
+}
+
+function clearActiveRun(sessionId) {
+  state.activeRuns.delete(sessionId);
+  removeSessionStorage(activeRunKey(sessionId));
+}
+
+function activeRunKey(sessionId) {
+  return `glassline.activeRun.${sessionId}`;
+}
+
+function scheduleRefresh(delay) {
+  if (typeof window.setTimeout !== "function") {
+    return;
+  }
+  if (refreshTimer !== undefined && typeof window.clearTimeout === "function") {
+    window.clearTimeout(refreshTimer);
+  }
+  const session = selectedSession();
+  refreshTimer = window.setTimeout(refreshTick, delay ?? refreshDelay({
+    activeRun: state.activeRuns.size > 0,
+    turnState: session?.turnState
+  }));
+}
+
+async function refreshTick() {
+  await pollActiveRuns();
+  await loadSessions({ preserveSelection: true });
+  scheduleRefresh();
+}
+
+function clearControlToken() {
+  state.controlToken = null;
+  state.control = { ...state.control, authorized: false };
+  removeSessionStorage("glassline.controlToken");
+}
+
+function readSessionStorage(key) {
+  try {
+    return globalThis.sessionStorage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionStorage(key, value) {
+  try {
+    globalThis.sessionStorage?.setItem(key, value);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+function removeSessionStorage(key) {
+  try {
+    globalThis.sessionStorage?.removeItem(key);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
 }
 
 function bodyForTimelineItem(item) {

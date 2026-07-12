@@ -218,11 +218,117 @@ h2 {
 
 .detail-pane {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+}
+
+.control-panel {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  min-width: 0;
+  padding: 12px 14px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.control-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.control-form textarea,
+.control-token-dialog input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.control-form textarea {
+  max-height: 144px;
+  resize: vertical;
+}
+
+.control-actions,
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.send-button,
+.secondary-button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 650;
+  min-height: 38px;
+  padding: 8px 13px;
+}
+
+.send-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.secondary-button {
+  background: var(--panel);
+}
+
+.send-button:disabled,
+.secondary-button:disabled,
+.control-form textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.control-status,
+.control-token-error {
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 18px;
+  padding-top: 4px;
+}
+
+.control-status[data-tone="bad"],
+.control-token-error {
+  color: var(--error);
+}
+
+.control-token-dialog {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgb(15 23 42 / 22%);
+  color: var(--ink);
+  max-width: min(420px, calc(100vw - 28px));
+  padding: 18px;
+  width: 100%;
+}
+
+.control-token-dialog::backdrop {
+  background: rgb(15 23 42 / 35%);
+}
+
+.control-token-dialog form {
+  display: grid;
+  gap: 10px;
+}
+
+.control-token-dialog label,
+.control-token-dialog p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dialog-actions {
+  justify-content: end;
 }
 
 .detail-header {
@@ -666,5 +772,14 @@ pre {
   .timeline,
   .raw-view {
     padding: 10px;
+  }
+
+  .control-panel {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .control-form {
+    gap: 8px;
   }
 }

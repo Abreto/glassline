@@ -31,6 +31,23 @@ test("requestJson includes API error payloads for unsuccessful responses", async
   );
 });
 
+test("requestJson forwards request options to fetch", async () => {
+  const calls = [];
+  const request = {
+    method: "POST",
+    headers: { Authorization: "Bearer token" },
+    body: "{}"
+  };
+  await requestJson("/api/control", {
+    request,
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+  });
+  assert.deepEqual(calls, [["/api/control", request]]);
+});
+
 test("renderErrorState shows an escaped alert-style empty state", () => {
   const html = renderErrorState("Load failed", "Bad <script>alert(1)</script>");
 

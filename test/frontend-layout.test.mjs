@@ -20,7 +20,7 @@ test("session pane and detail timeline use independent scroll containers", () =>
 
   assertRuleIncludes(".detail-pane", [
     "display: grid",
-    "grid-template-rows: auto auto minmax(0, 1fr)",
+    "grid-template-rows: auto auto minmax(0, 1fr) auto",
     "min-height: 0",
     "overflow: hidden"
   ]);
@@ -31,6 +31,12 @@ test("session pane and detail timeline use independent scroll containers", () =>
     "overflow-y: auto"
   ]);
   assertRuleIncludes(".timeline-block", ["flex: 0 0 auto"]);
+});
+
+test("follow-up composer stays outside the timeline scroll region", () => {
+  assertRuleIncludes(".control-panel", ["border-top: 1px solid var(--border)", "min-width: 0"]);
+  assertRuleIncludes(".control-form", ["display: grid", "grid-template-columns: minmax(0, 1fr) auto"]);
+  assertRuleIncludes(".control-panel", ["padding-bottom: max(12px, env(safe-area-inset-bottom))"]);
 });
 
 test("mobile layout keeps the session list as a horizontal strip", () => {
