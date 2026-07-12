@@ -1,4 +1,5 @@
 {"timestamp":"2026-07-05T09:00:00.000Z","type":"session_meta","payload":{"session_id":"11111111-1111-4111-8111-111111111111","timestamp":"2026-07-05T09:00:00.000Z","cwd":"/repo/glassline","source":"codex-cli"}}
+{"timestamp":"2026-07-05T09:00:04.000Z","type":"event_msg","payload":{"type":"task_started"}}
 {"timestamp":"2026-07-05T09:00:05.000Z","type":"event_msg","payload":{"type":"user_message","message":"Build the adapter."}}
 {"timestamp":"2026-07-05T09:00:08.000Z","type":"event_msg","payload":{"type":"agent_message","message":"I will inspect the session files."}}
 {"timestamp":"2026-07-05T09:00:08.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect the session files."}]}}
@@ -8,3 +9,4 @@ not json
 {"timestamp":"2026-07-05T09:00:12.000Z","type":"response_item","payload":{"type":"custom_tool_call","id":"tool_1","status":"completed","call_id":"call_2","name":"apply_patch","input":"*** Begin Patch"}}
 {"timestamp":"2026-07-05T09:00:13.000Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"call_2","success":true,"stdout":"Success. Updated the following files:\nM src/providers/codex.mjs\n","stderr":"","changes":{"src/providers/codex.mjs":{"type":"update","unified_diff":"@@ -1 +1 @@\n-old\n+new\n","move_path":null}}}}
 {"timestamp":"2026-07-05T09:00:14.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_2","output":"Success"}}
+{"timestamp":"2026-07-05T09:00:14.000Z","type":"event_msg","payload":{"type":"task_complete"}}

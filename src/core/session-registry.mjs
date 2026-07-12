@@ -113,6 +113,7 @@ function normalizeSession(provider, session) {
     title: session.title ?? "Untitled session",
     projectPath: session.projectPath,
     status: session.status ?? "unknown",
+    turnState: session.turnState ?? "unknown",
     quality: session.quality ?? inferQuality(sources, timeline),
     startedAt: session.startedAt,
     lastUpdatedAt,

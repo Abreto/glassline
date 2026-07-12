@@ -72,6 +72,8 @@ test("collectSessions merges providers, sorts by last update, and preserves sour
   assert.equal(sessions[0].quality, "complete");
   assert.equal(sessions[0].resumeRef.value, "session-123");
   assert.equal(sessions[0].resumeRef.command, "claude -r session-123");
+  assert.equal(sessions[0].turnState, "unknown");
+  assert.equal(sessions[1].turnState, "unknown");
   assert.equal(sessions[1].sources[0].kind, "process");
 });
 

@@ -14,6 +14,7 @@ export type SourceConfidence = "high" | "medium" | "low";
 export type DataQuality = "complete" | "partial" | "process-only" | "stale";
 
 export type SessionStatus = "running" | "idle" | "complete" | "failed" | "unknown";
+export type TurnState = "running" | "idle" | "unknown";
 
 export interface SourceRef {
   kind: SourceKind;
@@ -50,6 +51,7 @@ export interface ToolCall extends BaseTimelineItem {
   input?: unknown;
   output?: unknown;
   status: SessionStatus;
+  turnState: TurnState;
 }
 
 export interface FileChange extends BaseTimelineItem {

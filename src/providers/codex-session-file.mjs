@@ -11,6 +11,7 @@ const SESSION_UUID_PATTERN = new RegExp(`(${SESSION_UUID_SOURCE})`, "i");
 const SESSION_ID_PATTERN =
   /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?=\.jsonl$)/i;
 const SESSION_TITLE_MAX_LENGTH = 96;
+const TURN_STATE_TAIL_BYTES = 64 * 1024;
 
 export function resolveCodexHome(env = process.env) {
   return env.CODEX_HOME || path.join(os.homedir(), ".codex");
@@ -165,6 +166,7 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
   let parseErrors = 0;
   let meta = {};
   let latestCreatedAt;
+  let turnState = "unknown";
 
   for (const line of text.split("\n")) {
     if (!line.trim()) {
@@ -182,6 +184,10 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
     const payload = record.payload ?? {};
     const createdAt = toIsoTimestamp(record.timestamp ?? payload.timestamp) ?? fileUpdatedAt;
     latestCreatedAt = maxIso(latestCreatedAt, createdAt);
+
+    if (record.type === "event_msg") {
+      turnState = nextTurnState(turnState, payload.type);
+    }
 
     if (record.type === "session_meta") {
       meta = {
@@ -273,6 +279,7 @@ export async function parseCodexSessionFile(filePath, { indexEntry } = {}) {
     title: codexSessionTitle(indexEntry?.thread_name, firstUserMessage(timeline)),
     projectPath: meta.cwd,
     status: "unknown",
+    turnState,
     quality: "partial",
     startedAt: meta.startedAt,
     lastUpdatedAt,
@@ -307,6 +314,7 @@ async function summarizeCodexSessionFile(filePath, { indexEntry } = {}) {
     title: codexSessionTitle(indexEntry?.thread_name),
     projectPath: payload.cwd,
     status: "unknown",
+    turnState: await readRecentTurnState(filePath, fileStat.size),
     quality: "partial",
     startedAt: toIsoTimestamp(payload.timestamp ?? firstRecord?.timestamp),
     lastUpdatedAt,
@@ -464,6 +472,47 @@ async function readFirstJsonRecord(filePath) {
   }
 }
 
+async function readRecentTurnState(filePath, fileSize) {
+  const length = Math.min(fileSize, TURN_STATE_TAIL_BYTES);
+  if (length === 0) {
+    return "unknown";
+  }
+
+  const handle = await open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, fileSize - length);
+    let turnState = "unknown";
+
+    for (const line of buffer.toString("utf8").split("\n")) {
+      try {
+        const record = JSON.parse(line);
+        if (record.type === "event_msg") {
+          turnState = nextTurnState(turnState, record.payload?.type);
+        }
+      } catch {
+        // The first tail line may be partial and malformed records are best-effort data.
+      }
+    }
+
+    return turnState;
+  } finally {
+    await handle.close();
+  }
+}
+
+function nextTurnState(currentState, eventType) {
+  if (eventType === "task_started") {
+    return "running";
+  }
+
+  if (eventType === "task_complete" || eventType === "turn_aborted") {
+    return "idle";
+  }
+
+  return currentState;
+}
+
 async function findSessionJsonlFiles(root) {
   const files = [];
 
@@ -511,6 +560,7 @@ function staleIndexSession(indexEntry, filePath) {
     providerName: "Codex",
     title: codexSessionTitle(indexEntry.thread_name),
     status: "unknown",
+    turnState: "unknown",
     quality: "stale",
     lastUpdatedAt: indexEntry.updated_at ?? new Date().toISOString(),
     recentMessage: indexEntry.thread_name,

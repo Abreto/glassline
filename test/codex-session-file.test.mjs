@@ -36,6 +36,7 @@ test("parseCodexSessionFile extracts metadata, messages, and skips malformed lin
   assert.equal(session.startedAt, "2026-07-05T09:00:00.000Z");
   assert.equal(session.lastUpdatedAt, "2026-07-05T09:10:00.000Z");
   assert.equal(session.quality, "partial");
+  assert.equal(session.turnState, "idle");
   assert.equal(session.sources[0].kind, "session-file");
   assert.equal(session.sources[0].confidence, "medium");
   assert.equal(session.sources[0].path, fixtureSessionPath);
@@ -52,6 +53,46 @@ test("parseCodexSessionFile extracts metadata, messages, and skips malformed lin
       ["assistant", "I will inspect the session files."]
     ]
   );
+});
+
+test("parseCodexSessionFile derives turn state from the last valid lifecycle event", async () => {
+  const cases = [
+    { lifecycle: ["task_started"], expected: "running" },
+    { lifecycle: ["task_started", "task_complete"], expected: "idle" },
+    { lifecycle: ["task_started", "turn_aborted"], expected: "idle" },
+    { lifecycle: [], expected: "unknown" }
+  ];
+
+  for (const [index, testCase] of cases.entries()) {
+    const codexHome = await mkdtemp(path.join(os.tmpdir(), "glassline-codex-lifecycle-"));
+    const sessionId = `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, "0")}`;
+    const sessionDir = path.join(codexHome, "sessions/2026/07/05");
+    const sessionPath = path.join(
+      sessionDir,
+      `rollout-2026-07-05T09-00-00-${sessionId}.jsonl`
+    );
+    const records = [
+      JSON.stringify({
+        timestamp: "2026-07-05T09:00:00.000Z",
+        type: "session_meta",
+        payload: { session_id: sessionId, cwd: "/repo/glassline" }
+      }),
+      ...testCase.lifecycle.map((type, lifecycleIndex) =>
+        JSON.stringify({
+          timestamp: `2026-07-05T09:00:0${lifecycleIndex + 1}.000Z`,
+          type: "event_msg",
+          payload: { type }
+        })
+      ),
+      "not json"
+    ];
+
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(sessionPath, records.join("\n"));
+
+    const session = await parseCodexSessionFile(sessionPath);
+    assert.equal(session.turnState, testCase.expected);
+  }
 });
 
 test("parseCodexSessionFile uses the newest JSONL event when the index is stale", async () => {
@@ -497,6 +538,7 @@ test("codex provider merges matching process sources into session-file sessions"
   assert.equal(sessions.some((session) => session.id === "codex:process:123"), false);
   assert.equal(sessions.some((session) => session.id === "codex:process:456"), true);
   assert.equal(linked.status, "running");
+  assert.equal(linked.turnState, "idle");
   assert.equal(linked.quality, "partial");
   assert.equal(linked.sources.some((source) => source.kind === "process" && source.label === "pid 123"), true);
 });
