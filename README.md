@@ -1,5 +1,7 @@
 # Glassline
 
+[![CI](https://github.com/Abreto/glassline/actions/workflows/ci.yml/badge.svg)](https://github.com/Abreto/glassline/actions/workflows/ci.yml)
+
 Glassline is a read-only local AI agent session viewer. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data without sending prompts or controlling the running agent.
 
 ## Security and privacy
@@ -23,9 +25,11 @@ Glassline has no runtime npm dependencies.
 
 ## Run from a checkout
 
-From the repository directory:
+Clone the repository and start Glassline from the checkout:
 
 ```sh
+git clone https://github.com/Abreto/glassline.git
+cd glassline
 npm start
 ```
 

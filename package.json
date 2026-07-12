@@ -4,6 +4,11 @@
   "private": true,
   "description": "Read-only local AI agent session viewer.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Abreto/glassline.git"
+  },
+  "homepage": "https://github.com/Abreto/glassline#readme",
   "type": "module",
   "scripts": {
     "start": "node src/server.mjs",
