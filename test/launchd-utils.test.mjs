@@ -27,6 +27,7 @@ test("buildLaunchdPlist writes the Glassline launch agent contract", () => {
   assert.match(plist, /<key>StandardErrorPath<\/key>\s*<string>\/Users\/me\/Library\/Logs\/glassline\/stderr\.log<\/string>/);
   assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/);
   assert.match(plist, /<key>KeepAlive<\/key>\s*<true\/>/);
+  assert.doesNotMatch(plist, /GLASSLINE_ALLOWED_HOSTS/);
 });
 
 test("buildLaunchdPlist escapes XML text values", () => {
@@ -47,10 +48,12 @@ test("buildLaunchdPlist includes opt-in control values and escapes secrets", () 
     repoRoot: "/repo/glassline",
     nodePath: "/opt/homebrew/bin/node",
     paths: launchdPaths("/Users/me"),
+    allowedHosts: "glassline.example.com,192.0.2.10",
     controlToken: "abcdefghijklmnopqrstuvwxyz12345&",
     codexBin: "/opt/homebrew/bin/codex"
   });
 
+  assert.match(plist, /<key>GLASSLINE_ALLOWED_HOSTS<\/key>\s*<string>glassline\.example\.com,192\.0\.2\.10<\/string>/);
   assert.match(plist, /<key>GLASSLINE_CONTROL_TOKEN<\/key>\s*<string>abcdefghijklmnopqrstuvwxyz12345&amp;<\/string>/);
   assert.match(plist, /<key>GLASSLINE_CODEX_BIN<\/key>\s*<string>\/opt\/homebrew\/bin\/codex<\/string>/);
   assert.deepEqual(launchdPlistWriteOptions({ controlToken: "secret" }), {

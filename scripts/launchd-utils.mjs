@@ -15,7 +15,14 @@ export function launchdPaths(homeDir) {
   };
 }
 
-export function buildLaunchdPlist({ repoRoot, nodePath, paths, controlToken, codexBin }) {
+export function buildLaunchdPlist({
+  repoRoot,
+  nodePath,
+  paths,
+  allowedHosts,
+  controlToken,
+  codexBin
+}) {
   const serverPath = path.join(repoRoot, "src", "server.mjs");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -39,7 +46,7 @@ export function buildLaunchdPlist({ repoRoot, nodePath, paths, controlToken, cod
     <string>6280</string>
     <key>GLASSLINE_MOCK</key>
     <string>0</string>
-${launchdEnvironmentEntry("GLASSLINE_CONTROL_TOKEN", controlToken)}${launchdEnvironmentEntry("GLASSLINE_CODEX_BIN", codexBin)}
+${launchdEnvironmentEntry("GLASSLINE_ALLOWED_HOSTS", allowedHosts)}${launchdEnvironmentEntry("GLASSLINE_CONTROL_TOKEN", controlToken)}${launchdEnvironmentEntry("GLASSLINE_CODEX_BIN", codexBin)}
   </dict>
   <key>RunAtLoad</key>
   <true/>

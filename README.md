@@ -99,19 +99,25 @@ Install a user-level `launchd` service from the current checkout:
 npm run install-launchd
 ```
 
-To opt into follow-up for the LaunchAgent, pass the token while installing:
+To persist a reverse-proxy hostname and opt into follow-up for the LaunchAgent, pass both values while installing:
 
 ```sh
-GLASSLINE_CONTROL_TOKEN='<generated-token>' npm run install-launchd
+GLASSLINE_ALLOWED_HOSTS=glassline.example.com \
+GLASSLINE_CONTROL_TOKEN='<generated-token>' \
+npm run install-launchd
 ```
 
-The installer resolves the current Codex executable, stores its absolute path and the token in the user LaunchAgent plist, and writes that plist with mode `0600`. The token is still plaintext local-user configuration; reinstall the service to rotate or remove it.
+Either variable can be supplied independently. The installer validates `GLASSLINE_ALLOWED_HOSTS`, resolves the current Codex executable when control is enabled, and stores the configured values in the user LaunchAgent plist. A plist containing the token is explicitly set to mode `0600`. The token is still plaintext local-user configuration; reinstall the service to rotate or remove it.
+
+The installer keeps `HOST=127.0.0.1`. `GLASSLINE_ALLOWED_HOSTS` changes only accepted HTTP Host headers, so a local Cloudflare Tunnel can reach Glassline without exposing the listener to the LAN.
 
 The LaunchAgent does not require `sudo`. It runs the current repository with the Node executable used by npm and sets:
 
 - `HOST=127.0.0.1`
 - `PORT=6280`
 - `GLASSLINE_MOCK=0`
+
+It also copies optional `GLASSLINE_ALLOWED_HOSTS`, `GLASSLINE_CONTROL_TOKEN`, and the resolved `GLASSLINE_CODEX_BIN` from the installation environment.
 
 Check service state:
 

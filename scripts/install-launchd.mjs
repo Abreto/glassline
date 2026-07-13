@@ -16,6 +16,7 @@ import {
   writeLaunchdPlist
 } from "./launchd-utils.mjs";
 import { parseControlConfig, resolveCodexBinary } from "../src/control/control-auth.mjs";
+import { parseAllowedHosts } from "../src/http-security.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -27,6 +28,8 @@ await main();
 async function main() {
   ensureMacOS();
   const uid = process.getuid();
+  const allowedHosts = process.env.GLASSLINE_ALLOWED_HOSTS;
+  parseAllowedHosts(allowedHosts);
   const controlConfig = parseControlConfig(process.env);
   const codexBin = controlConfig.enabled ? await resolveCodexBinary(controlConfig) : undefined;
   const controlToken = controlConfig.enabled ? process.env.GLASSLINE_CONTROL_TOKEN : undefined;
@@ -48,6 +51,7 @@ async function main() {
       repoRoot,
       nodePath: process.execPath,
       paths,
+      allowedHosts,
       controlToken,
       codexBin
     }),
