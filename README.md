@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Abreto/glassline/actions/workflows/ci.yml/badge.svg)](https://github.com/Abreto/glassline/actions/workflows/ci.yml)
 
-Glassline is a local AI agent session viewer that is read-only by default. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data. An explicitly enabled control mode can send a plain-text follow-up to an existing idle Codex session through the official Codex CLI.
+Glassline is a mobile-friendly, local-first AI agent session viewer. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data. It is read-only by default; an explicitly enabled control mode can send a plain-text follow-up to an existing idle Codex session through the official Codex CLI.
 
 ## Why Glassline
 
@@ -90,6 +90,8 @@ V1 control is deliberately narrow:
 - It delegates execution to `codex exec resume` and does not implement an agent runtime.
 - It uses Codex `on-request` approvals with Auto-review and inherits the current Codex sandbox, writable roots, network policy, rules, and project configuration.
 - It does not create sessions, queue or interrupt turns, expose manual approvals, accept attachments, terminate processes, or provide shell/PTY access.
+
+Each follow-up starts a separate non-interactive `codex exec resume` process and appends to the same persisted session history. A Codex App or interactive CLI that already has the session loaded may not observe that external update until the session is reopened or the client is restarted. Glassline does not attach to or inject input into an existing foreground App or CLI process.
 
 ## macOS persistent local service
 
