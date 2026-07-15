@@ -12,7 +12,7 @@ When I am at my computer, I prefer to work through the provider's official CLI o
 
 I do not want Glassline to become another execution layer between me and the agent. It therefore remains read-only by default and delegates its one opt-in follow-up action to the official Codex CLI.
 
-Any additional remote control must remain deliberately narrow and available only to authenticated devices. Actions should be delegated to the provider's official CLI or client rather than executed by a separate agent runtime maintained by Glassline.
+Any additional remote control would require a separate security design covering authorization, auditability, revocation, and conservative defaults. Actions should be delegated to the provider's official CLI or client rather than executed by a separate agent runtime maintained by Glassline.
 
 ## Security and privacy
 
