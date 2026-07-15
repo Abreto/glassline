@@ -34,9 +34,10 @@ test("resolveClaudeConfigDir honors CLAUDE_CONFIG_DIR and defaults to ~/.claude"
 test("parseClaudeSessionFile extracts the active message and tool timeline", async () => {
   const session = await parseClaudeSessionFile(fixtureSessionPath);
   const fileStat = await stat(fixtureSessionPath);
-  const expectedUpdatedAt = new Date(
-    Math.max(fileStat.mtimeMs, Date.parse("2026-07-05T09:00:12.000Z"))
-  ).toISOString();
+  const fileUpdatedAt = fileStat.mtime.toISOString();
+  const latestRecordAt = "2026-07-05T09:00:12.000Z";
+  const expectedUpdatedAt =
+    Date.parse(fileUpdatedAt) >= Date.parse(latestRecordAt) ? fileUpdatedAt : latestRecordAt;
 
   assert.equal(session.id, SESSION_ID);
   assert.equal(session.title, "Fixture Claude thread");
