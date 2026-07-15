@@ -2,13 +2,15 @@
 
 [![CI](https://github.com/Abreto/glassline/actions/workflows/ci.yml/badge.svg)](https://github.com/Abreto/glassline/actions/workflows/ci.yml)
 
-Glassline is a mobile-friendly, local-first AI agent session viewer. It provides a browser UI for watching local agent sessions, transcript fragments, command output, file-change summaries, and raw source data. It is read-only by default; an explicitly enabled control mode can send a plain-text follow-up to an existing idle Codex session through the official Codex CLI.
+Glassline is a mobile-friendly, local-first AI agent session viewer for monitoring progress and reading results, especially from a phone. It watches existing sessions without installing provider hooks, changing agent configuration, wrapping provider CLIs, or becoming another agent runtime. Its browser UI shows transcript fragments, command output, file-change summaries, and raw source data. Glassline is read-only by default; an explicitly enabled control mode can send a plain-text follow-up to an existing idle Codex session through the official Codex CLI.
 
 ## Why Glassline
 
-I built Glassline because I wanted a convenient, mobile-friendly way to follow the progress and results of running agents, and I could not find an existing open-source tool that fit this workflow well.
+I built Glassline because I wanted a convenient way to monitor agent progress and read results from my phone without changing the agents or how they run. I could not find an existing open-source tool that fit this workflow well.
 
-When I am at my computer, I prefer to work through the provider's official CLI or desktop client. I do not want Glassline to become another execution layer between me and the agent. Glassline therefore remains read-only by default and delegates its one opt-in follow-up action to the official Codex CLI.
+When I am at my computer, I prefer to work through the provider's official CLI or desktop client. Away from my computer, Glassline is for checking progress, reading results, and optionally sending a lightweight follow-up to an existing idle Codex session. When I need full interactive control, shell access, complex approvals, or a new session, I use mobile SSH with tmux and operate the provider's official CLI directly.
+
+I do not want Glassline to become another execution layer between me and the agent. It therefore remains read-only by default and delegates its one opt-in follow-up action to the official Codex CLI.
 
 Any additional remote control must remain deliberately narrow and available only to authenticated devices. Actions should be delegated to the provider's official CLI or client rather than executed by a separate agent runtime maintained by Glassline.
 
