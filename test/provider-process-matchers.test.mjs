@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -61,6 +63,7 @@ test("extractClaudeResumeReference reads resume arguments and rejects missing va
 
 test("claude-code provider exposes resumeRef for resumable process sessions", async () => {
   const provider = createClaudeCodeProvider({
+    claudeConfigDir: path.join(os.tmpdir(), `glassline-missing-claude-config-${process.pid}`),
     listAgentProcesses: async () => [
       {
         pid: 321,

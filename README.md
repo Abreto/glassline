@@ -56,6 +56,7 @@ Runtime options:
 - `GLASSLINE_ALLOWED_HOSTS`: comma-separated additional hostnames or IP addresses accepted in HTTP Host headers. Entries are exact, omit ports, and do not support wildcards.
 - `GLASSLINE_MOCK=0`: hide sample provider data.
 - `CODEX_HOME`: override the Codex data directory, default `~/.codex`.
+- `CLAUDE_CONFIG_DIR`: override the Claude Code data directory, default `~/.claude`.
 - `GLASSLINE_CONTROL_TOKEN`: enable authenticated Codex follow-up; must contain at least 32 characters.
 - `GLASSLINE_CODEX_BIN`: absolute Codex executable path. When omitted, Glassline resolves `codex` from `PATH`.
 
@@ -153,14 +154,14 @@ Configure and operate the tunnel, identity policy, TLS, and access logs outside 
 
 - `mock`: a complete synthetic session for UI development.
 - `codex`: best-effort process discovery plus best-effort session-file parsing from `CODEX_HOME || ~/.codex`. Session-file entries are normally `partial`; unmatched live processes remain `process-only`.
-- `claude-code`: best-effort process discovery only; sessions are `process-only`.
+- `claude-code`: best-effort process discovery plus main-session JSONL parsing from `CLAUDE_CONFIG_DIR || ~/.claude`. Root session-file entries are normally `partial`; nested subagent transcripts are ignored, and unmatched live processes remain `process-only`.
 
 Private provider files are not stable APIs. Missing, malformed, or stale data is handled conservatively and surfaced with `SourceRef` and explicit quality metadata.
 
 Known limits:
 
 - Codex session-file status is usually `unknown` unless it can be matched to a running process.
-- Claude Code has no transcript parser yet.
+- Claude session-file status is usually `unknown` unless an exact session ID can be matched to a running process. Edit and Write remain generic tool calls rather than derived file-change records.
 - There is no built-in user authentication, remote deployment model, new-session input, manual approve/deny action, process control, arbitrary command execution, or web shell.
 
 ## Roadmap
@@ -244,7 +245,7 @@ Before making a repository public:
 
 1. Fetch the complete Git history and run `npm run release-check`.
 2. Run `npm pack --dry-run --json` and inspect the file list.
-3. Start the fixture server with `GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home npm start`.
+3. Start the fixture server with `GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home CLAUDE_CONFIG_DIR=test/fixtures/claude-config npm start`.
 4. Check `/`, `/api/providers`, `/api/sessions`, and a timeline page from an allowed Host.
 5. Confirm an unapproved Host receives `403` before provider discovery.
 6. Confirm helper processes such as Codex Computer Use are not listed as sessions.

@@ -37,7 +37,8 @@ This document records the current project state for future coding agents. It is 
   - `mock.mjs`: UI and demo data; enabled by default.
   - `codex.mjs`: combines Codex process discovery with the session-file adapter.
   - `codex-session-file.mjs`: reads and parses Codex JSONL under `CODEX_HOME || ~/.codex`.
-  - `claude-code.mjs`: process-only Claude Code discovery.
+  - `claude-code.mjs`: combines Claude Code process discovery with the session-file adapter.
+  - `claude-session-file.mjs`: reads root Claude Code project JSONL under `CLAUDE_CONFIG_DIR || ~/.claude`.
   - `process-utils.mjs`: `ps` process discovery, command tokenization, and process-only session construction.
 - The frontend uses browser-native static modules with no React, Vite, or Tailwind:
   - `public/app.js`: application state, API requests, session selection, timeline/raw rendering, and the copy registry.
@@ -60,11 +61,12 @@ This document records the current project state for future coding agents. It is 
   - `GLASSLINE_ALLOWED_HOSTS`: comma-separated additional HTTP Host hostnames or IP addresses. Matching is exact and ignores the request port. Schemes, paths, userinfo, ports, and wildcards are not allowed in entries.
   - `GLASSLINE_MOCK=0`: hide the mock provider.
   - `CODEX_HOME`: override the Codex data directory; defaults to `~/.codex`.
+  - `CLAUDE_CONFIG_DIR`: override the Claude Code data directory; defaults to `~/.claude`.
   - `GLASSLINE_CONTROL_TOKEN`: opt into existing-session Codex follow-up; minimum 32 characters.
   - `GLASSLINE_CODEX_BIN`: absolute Codex executable path; otherwise resolved from `PATH` when control is enabled.
 - Internal smoke-test example:
   ```sh
-  GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home npm start
+  GLASSLINE_MOCK=0 PORT=6281 CODEX_HOME=test/fixtures/codex-home CLAUDE_CONFIG_DIR=test/fixtures/claude-config npm start
   ```
 - HTTP API:
   - `GET /api/providers`
@@ -94,7 +96,13 @@ This document records the current project state for future coding agents. It is 
   - `turnState` is derived independently from the latest valid `task_started`, `task_complete`, or `turn_aborted` event. Process liveness must not be used as turn-busy state.
   - Follow-up invokes `codex exec resume <uuid> - --json` without a shell, writes the prompt through stdin, uses `approval_policy=on-request` plus `approvals_reviewer=auto_review`, and does not override the user's Codex sandbox or project configuration.
 - `claude-code`
-  - Currently performs process discovery only and returns `process-only` sessions.
+  - Session-file discovery scans only `projects/*/*.jsonl` under `CLAUDE_CONFIG_DIR || ~/.claude`; nested subagent JSONL is intentionally ignored.
+  - List mode returns lightweight summaries. Session details, timeline pages, and raw data load the complete JSONL on demand.
+  - Session-file IDs have the form `claude-code:session-file:<uuid>` and normally use `partial` quality. Unreadable identifiable files degrade to `stale`.
+  - Titles prefer the latest explicit `agent-name`, then `ai-title`, then the first meaningful user request, and are limited to 96 characters.
+  - When `last-prompt.leafUuid` is available, the timeline follows only that active parent chain. Missing or invalid leaf metadata falls back to valid file order; raw view always retains the complete JSONL.
+  - User and assistant text become messages. Bash becomes a command, while other tools remain tool calls whose results are matched by `tool_use_id`. Thinking, attachments, images, and internal command wrappers are excluded from the rendered timeline.
+  - `turnState` is derived from transcript lifecycle signals independently of process liveness. Exact process session-ID matches add the process source and mark the session `running`; unmatched processes remain `process-only` and are never guessed from cwd or timestamps.
   - Extracts `resumeRef` from `-r`, `--resume`, and `--session-id`. Commands use the form `claude -r <value>`.
 - `tmux`
   - `SourceKind` already includes `tmux`, but there is no tmux adapter or web shell.
@@ -156,7 +164,7 @@ This document records the current project state for future coding agents. It is 
 
 - Provider data is best-effort, especially unstable private Codex and Claude files.
 - Codex session-file status is normally `unknown`; it becomes `running` only when confidently associated with a live process.
-- Claude Code has no session-file or transcript parser yet.
+- Claude session-file status is normally `unknown`; it becomes `running` only when an exact process session ID matches. Nested subagent transcripts are not listed, and Edit/Write tools are not converted into `file_change` records.
 - There is no generic `jsonl` adapter, tmux adapter, or app-server adapter.
 - There is no built-in authentication, user system, relay, or remote deployment model. Personal remote access currently depends on an external authenticated reverse proxy. Do not treat the default service as a shared network application.
 - There is no new-session input, manual approval action, queue, interruption, process termination, arbitrary command execution, or web shell. Existing-session Codex follow-up is the sole approved exception to the read-only default.
